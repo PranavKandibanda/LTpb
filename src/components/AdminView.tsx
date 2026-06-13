@@ -566,7 +566,15 @@ export default function AdminView({
                       </div>
                       <div className="text-left min-w-0">
                         <h4 className="text-sm font-black text-white truncate">{p.name}</h4>
-                        <span className="text-[10px] text-on-surface-variant font-mono block mt-0.5 truncate">ID: {p.id}</span>
+                        <div className="group relative inline-block mt-0.5">
+                          <span className="text-[10px] text-on-surface-variant font-mono truncate">ID: {p.id}</span>
+                          <span
+                            onClick={() => navigator.clipboard.writeText(p.id)}
+                            className="ml-1 text-[9px] text-brand-primary cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity select-none"
+                          >
+                            [copy]
+                          </span>
+                        </div>
                       </div>
                     </div>
 
