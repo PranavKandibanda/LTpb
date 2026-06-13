@@ -16,7 +16,8 @@ import {
   UserX, 
   FileText, 
   UserPlus,
-  Trophy
+  Trophy,
+  Copy
 } from 'lucide-react';
 import { Player, Challenge, MatchActivity, Verification } from '../types';
 import { calculateEloExchange, checkAntiFarming } from '../eloService';
@@ -566,14 +567,12 @@ export default function AdminView({
                       </div>
                       <div className="text-left min-w-0">
                         <h4 className="text-sm font-black text-white truncate">{p.name}</h4>
-                        <div className="group relative inline-block mt-0.5">
-                          <span className="text-[10px] text-on-surface-variant font-mono truncate">ID: {p.id}</span>
-                          <span
+                        <div className="group relative inline-flex items-center gap-1 mt-0.5 max-w-full">
+                          <span className="text-[10px] text-on-surface-variant font-mono truncate block">ID: {p.id}</span>
+                          <Copy
                             onClick={() => navigator.clipboard.writeText(p.id)}
-                            className="ml-1 text-[9px] text-brand-primary cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity select-none"
-                          >
-                            [copy]
-                          </span>
+                            className="w-3 h-3 text-brand-primary cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          />
                         </div>
                       </div>
                     </div>
