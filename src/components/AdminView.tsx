@@ -19,8 +19,12 @@ import {
   Trophy,
   Copy
 } from 'lucide-react';
-import { Player, Challenge, MatchActivity, Verification } from '../types';
+import { Player, Challenge, MatchActivity, Verification, AuditLog } from '../types';
 import { calculateEloExchange, checkAntiFarming } from '../eloService';
+import { UserRepository } from '../repositories/UserRepository';
+import { ChallengeRepository } from '../repositories/ChallengeRepository';
+import { NotificationRepository } from '../repositories/NotificationRepository';
+import { AuditLogRepository } from '../repositories/AuditLogRepository';
 import TournamentBuilderView from './TournamentBuilderView';
 
 interface AdminViewProps {
@@ -106,63 +110,139 @@ export default function AdminView({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Handlers for approvals
-  const handleApproveUser = (player: Player) => {
-    const updated = players.map(p => p.id === player.id ? { ...p, status: 'active' as const } : p);
-    setPlayers(updated);
-    addAuditLog(`Approved joining request for user: ${player.name} (${player.id}). State shifted to ACTIVE.`);
-    setSuccessMsg(`Successfully approved membership for ${player.name}!`);
-    setTimeout(() => setSuccessMsg(null), 4500);
+  const handleApproveUser = async (player: Player) => {
+    try {
+      await UserRepository.update(player.id, { status: 'active' });
+      const updated = players.map(p => p.id === player.id ? { ...p, status: 'active' as const } : p);
+      setPlayers(updated);
 
-    // Notify user
-    const newNotif = {
-      id: `notif_${Date.now()}`,
-      title: 'Membership Approved',
-      message: `Your membership registration has been approved by ${currentUser.name}. Welcome to Pickleball Club Elo!`,
-      time: 'Just now',
-      unread: true
-    };
-    setNotifications(prev => [newNotif, ...prev]);
+      await AuditLogRepository.create({
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        action: 'APPROVE_USER',
+        details: `Approved joining request for user: ${player.name} (${player.id}).`
+      });
+
+      await NotificationRepository.create({
+        id: `notif_${Date.now()}`,
+        userId: player.id,
+        title: 'Membership Approved',
+        message: `Your membership registration has been approved by ${currentUser.name}. Welcome to Pickleball Club Elo!`,
+        time: 'Just now',
+        createdAt: new Date().toISOString(),
+        unread: true
+      });
+
+      setSuccessMsg(`Successfully approved membership for ${player.name}!`);
+      setTimeout(() => setSuccessMsg(null), 4500);
+    } catch (e) {
+      console.error('Approve failed', e);
+    }
   };
 
-  const handleDeclineUser = (player: Player) => {
-    const updated = players.filter(p => p.id !== player.id);
-    setPlayers(updated);
-    addAuditLog(`Declined and removed registration request for user: ${player.name} (${player.id}).`);
-    setSuccessMsg(`Declined membership request for ${player.name}.`);
-    setTimeout(() => setSuccessMsg(null), 4500);
+  const handleDeclineUser = async (player: Player) => {
+    try {
+      await UserRepository.delete(player.id);
+
+      await AuditLogRepository.create({
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        action: 'DECLINE_USER',
+        details: `Declined registration request for user: ${player.name} (${player.id}).`
+      });
+
+      const updated = players.filter(p => p.id !== player.id);
+      setPlayers(updated);
+      setSuccessMsg(`Declined membership request for ${player.name}.`);
+      setTimeout(() => setSuccessMsg(null), 4500);
+    } catch (e) {
+      console.error('Decline failed', e);
+    }
   };
 
   // Handlers for user modifications
-  const handleSuspendUser = (player: Player) => {
-    const updated = players.map(p => p.id === player.id ? { ...p, status: 'suspended' as const } : p);
-    setPlayers(updated);
-    addAuditLog(`User account was SUSPENDED: ${player.name} (${player.id}). Disabled participation in matches.`);
-    setSuccessMsg(`Suspended ${player.name}. Access deactivated.`);
-    setTimeout(() => setSuccessMsg(null), 4500);
+  const handleSuspendUser = async (player: Player) => {
+    try {
+      await UserRepository.update(player.id, { status: 'suspended' });
+      const updated = players.map(p => p.id === player.id ? { ...p, status: 'suspended' as const } : p);
+      setPlayers(updated);
+      await AuditLogRepository.create({
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        action: 'SUSPEND_USER',
+        details: `User account was suspended: ${player.name} (${player.id}).`
+      });
+      setSuccessMsg(`Suspended ${player.name}. Access deactivated.`);
+      setTimeout(() => setSuccessMsg(null), 4500);
+    } catch (e) {
+      console.error('Suspend failed', e);
+    }
   };
 
-  const handleActivateUser = (player: Player) => {
-    const updated = players.map(p => p.id === player.id ? { ...p, status: 'active' as const } : p);
-    setPlayers(updated);
-    addAuditLog(`User account was ACTIVED: ${player.name} (${player.id}). Activated participation.`);
-    setSuccessMsg(`Reactivated ${player.name}.`);
-    setTimeout(() => setSuccessMsg(null), 4500);
+  const handleActivateUser = async (player: Player) => {
+    try {
+      await UserRepository.update(player.id, { status: 'active' });
+      const updated = players.map(p => p.id === player.id ? { ...p, status: 'active' as const } : p);
+      setPlayers(updated);
+      await AuditLogRepository.create({
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        action: 'ACTIVATE_USER',
+        details: `User account was reactivated: ${player.name} (${player.id}).`
+      });
+      setSuccessMsg(`Reactivated ${player.name}.`);
+      setTimeout(() => setSuccessMsg(null), 4500);
+    } catch (e) {
+      console.error('Activate failed', e);
+    }
   };
 
-  const handlePromoteToOfficer = (player: Player) => {
-    const updated = players.map(p => p.id === player.id ? { ...p, role: 'officer' as const } : p);
-    setPlayers(updated);
-    addAuditLog(`User promoted to OFFICER: ${player.name} (${player.id}). Admin privileges expanded.`);
-    setSuccessMsg(`Promoted ${player.name} to Officer metadata status.`);
-    setTimeout(() => setSuccessMsg(null), 4500);
+  const handlePromoteToOfficer = async (player: Player) => {
+    try {
+      await UserRepository.update(player.id, { role: 'officer' });
+      const updated = players.map(p => p.id === player.id ? { ...p, role: 'officer' as const } : p);
+      setPlayers(updated);
+      await AuditLogRepository.create({
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        action: 'PROMOTE_OFFICER',
+        details: `User promoted to officer: ${player.name} (${player.id}).`
+      });
+      setSuccessMsg(`Promoted ${player.name} to Officer.`);
+      setTimeout(() => setSuccessMsg(null), 4500);
+    } catch (e) {
+      console.error('Promote failed', e);
+    }
   };
 
-  const handleDemoteToMember = (player: Player) => {
-    const updated = players.map(p => p.id === player.id ? { ...p, role: 'member' as const } : p);
-    setPlayers(updated);
-    addAuditLog(`User demoted to MEMBER: ${player.name} (${player.id}). Admin privileges revoked.`);
-    setSuccessMsg(`Demoted ${player.name} back to Club Member.`);
-    setTimeout(() => setSuccessMsg(null), 4500);
+  const handleDemoteToMember = async (player: Player) => {
+    try {
+      await UserRepository.update(player.id, { role: 'member' });
+      const updated = players.map(p => p.id === player.id ? { ...p, role: 'member' as const } : p);
+      setPlayers(updated);
+      await AuditLogRepository.create({
+        id: `audit_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        action: 'DEMOTE_MEMBER',
+        details: `User demoted to member: ${player.name} (${player.id}).`
+      });
+      setSuccessMsg(`Demoted ${player.name} back to Club Member.`);
+      setTimeout(() => setSuccessMsg(null), 4500);
+    } catch (e) {
+      console.error('Demote failed', e);
+    }
   };
 
   // Resolve disputed match
