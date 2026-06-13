@@ -2,7 +2,7 @@
 
 Pro-tracker platform for pickleball performance analytics and club elo rankings.
 
-**Hosted:** https://ltpickleball.vercel.app
+**Hosted:** https://ltpbl.vercel.app
 
 ## Stack
 
