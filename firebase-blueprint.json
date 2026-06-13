@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "Information about a pickleball club player",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "nickname": { "type": "string" },
+        "avatar": { "type": "string" },
+        "rank": { "type": "integer" },
+        "tier": { "type": "string", "enum": ["Grandmaster", "Elite", "Pro", "Expert", "Challenger"] },
+        "elo": { "type": "integer" },
+        "wins": { "type": "integer" },
+        "losses": { "type": "integer" },
+        "streak": { "type": "integer" },
+        "peakElo": { "type": "integer" },
+        "bio": { "type": "string" },
+        "joinedYear": { "type": "string" },
+        "trend": { "type": "integer" },
+        "matchesThisWeek": { "type": "integer" },
+        "role": { "type": "string", "enum": ["member", "officer", "superadmin"] },
+        "status": { "type": "string", "enum": ["pending", "active", "suspended"] },
+        "awards": {
+          "type": "object",
+          "properties": {
+            "gold": { "type": "integer" },
+            "silver": { "type": "integer" },
+            "bronze": { "type": "integer" }
+          }
+        }
+      },
+      "required": ["id", "name", "avatar", "rank", "tier", "elo", "wins", "losses", "streak", "peakElo", "trend", "role", "status"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Completed match action containing scoreboards and ELO details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "player1Id": { "type": "string" },
+        "player2Id": { "type": "string" },
+        "opponentId": { "type": "string" },
+        "opponentName": { "type": "string" },
+        "opponentAvatar": { "type": "string" },
+        "type": { "type": "string" },
+        "timeString": { "type": "string" },
+        "result": { "type": "string", "enum": ["W", "L"] },
+        "scores": { "type": "string" },
+        "eloChange": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "opponentId", "opponentName", "type", "timeString", "result", "scores", "eloChange", "timestamp"]
+    },
+    "Challenge": {
+      "title": "Challenge",
+      "description": "Match matchmaking requests issued by players",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "challengerId": { "type": "string" },
+        "challengerName": { "type": "string" },
+        "challengerAvatar": { "type": "string" },
+        "challengerRank": { "type": "string" },
+        "challengerTier": { "type": "string" },
+        "opponentId": { "type": "string" },
+        "opponentName": { "type": "string" },
+        "timeString": { "type": "string" },
+        "location": { "type": "string" },
+        "statusString": { "type": "string", "enum": ["pending", "accepted", "declined", "submitted", "disputed", "completed"] },
+        "timestamp": { "type": "string" },
+        "matchType": { "type": "string", "enum": ["singles", "doubles"] },
+        "submittedScore": { "type": "string" },
+        "submittedById": { "type": "string" },
+        "winnerId": { "type": "string" }
+      },
+      "required": ["id", "challengerId", "challengerName", "challengerAvatar", "opponentId", "opponentName", "timeString", "location", "statusString", "timestamp"]
+    },
+    "Verification": {
+      "title": "Verification",
+      "description": "Roster verify requests and match reviews",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string", "enum": ["verified", "pending"] },
+        "timeAgo": { "type": "string" }
+      },
+      "required": ["id", "title", "type", "status", "timeAgo"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Club interaction alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "time": { "type": "string" },
+        "unread": { "type": "boolean" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "title", "message", "time", "unread"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Club player directory containing profile stats, role information, and ranking tiers"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Record database of finished or verified matches containing ELO offsets"
+    },
+    "/challenges/{challengeId}": {
+      "schema": "Challenge",
+      "description": "Record matchmaking proposals and verified scores"
+    },
+    "/verifications/{verificationId}": {
+      "schema": "Verification",
+      "description": "System audits and verification events"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Player-specific notification center log records"
+    }
+  }
+}

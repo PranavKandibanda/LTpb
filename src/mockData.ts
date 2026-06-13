@@ -1,0 +1,159 @@
+import { Player, MatchActivity, Challenge, Verification } from './types';
+
+export const INITIAL_PLAYERS: Player[] = [
+  {
+    id: 'elena_v',
+    name: 'Elena V.',
+    nickname: 'Defensive specialist',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAVwaI0QvUg2fMiuO1ugifD4U6t-RiswVObbTC8Qh6QTdiIu62Cs2kLFh9ccNp0Xi4ZPyM0lwpQt3K8Ix3T4YquLNLqK4p67puWEz4K3i95U0SqwPqq6LVbr_Si20Dd2GSepAAEOxX2xoWag10ZpA3gNbbQ0h82hKugH_HC_Hyy8DFnkONtZwoYtpDTgu1KL9mMWKwTIo2DMLTo2xd8nPutZh2ULnaDTCygBT_dzMAlvId_HrDuweq7Xlsm81tegO5UVsAB5j_YOyEV',
+    rank: 1,
+    tier: 'Grandmaster',
+    elo: 2890,
+    wins: 120,
+    losses: 15,
+    streak: 8,
+    peakElo: 2905,
+    bio: 'Defensive specialist since 2022.',
+    joinedYear: '2022',
+    trend: 14,
+    matchesThisWeek: 5,
+    role: 'officer',
+    status: 'active',
+    awards: { gold: 3, silver: 1, bronze: 0 }
+  },
+  {
+    id: 'jordan_p',
+    name: 'Jordan P.',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBo9tcC2Yy11vswe2dXY3DmwMQLNo9Qb1uiZiMUVkZO6NqZ6Nt1lZWgLMDmYKnbaibslzumKbkJM3_6PERiLMEStAr4XhHpMM66-UGsDFWAnRpIRw1Mz5Oe4uESU_u3PbMGAHK-yNRtGKxENgNQUor-eYSsZlCacmJ_eVLeoIzpWp2PRZk9pGcv4SRJK3A1lkln4gYd8RPR2paFh399YNcd-aVfecWKfafFh4PFZOYhV0Xmo03T7x99woQUmUsolYph6w0Ui_bKZEO',
+    rank: 2,
+    tier: 'Elite',
+    elo: 2750,
+    wins: 98,
+    losses: 22,
+    streak: 4,
+    peakElo: 2760,
+    trend: 8,
+    role: 'officer',
+    status: 'active',
+    awards: { gold: 1, silver: 4, bronze: 1 }
+  },
+  {
+    id: 'alex_rivers',
+    name: 'Alex Rivers',
+    nickname: 'Smasher',
+    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDxI58hgXiMsH1grQINr-F89Ji3n1FHcdb24rpSfu_qKdCAFe166bPVQ8gux6JC_F6Icu5E9bXyRpUeaDuKayrZ-0RAYrcGHcrfSGxYnRqTnDpcNr5Rhj6tN-tlGT-038KtmuksXWBKX8QBEN0E4NEnxOOkMAK-_Jx19ATJODHDFEOFesJIGfQE0u1MALDXqq1G7h_sLxdw9J7WqNG_Y7xofqrMVtN-CSqafqOmGfVII6fwWqM1FR5ndHhjx5w2cIwrXzCb2wCfgOI3',
+    rank: 3,
+    tier: 'Expert',
+    elo: 2450,
+    wins: 42,
+    losses: 12,
+    streak: 6,
+    peakElo: 2510,
+    bio: 'Heavy baseline smasher with precision lobs.',
+    joinedYear: '2023',
+    trend: 15,
+    matchesThisWeek: 4,
+    role: 'superadmin',
+    status: 'active',
+    awards: { gold: 0, silver: 1, bronze: 2 }
+  }
+];
+
+export const INITIAL_MATCH_ACTIVITIES: MatchActivity[] = [
+  {
+    id: 'match_1',
+    opponentId: 'jordan_p',
+    opponentName: 'Jordan P.',
+    opponentAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBo9tcC2Yy11vswe2dXY3DmwMQLNo9Qb1uiZiMUVkZO6NqZ6Nt1lZWgLMDmYKnbaibslzumKbkJM3_6PERiLMEStAr4XhHpMM66-UGsDFWAnRpIRw1Mz5Oe4uESU_u3PbMGAHK-yNRtGKxENgNQUor-eYSsZlCacmJ_eVLeoIzpWp2PRZk9pGcv4SRJK3A1lkln4gYd8RPR2paFh399YNcd-aVfecWKfafFh4PFZOYhV0Xmo03T7x99woQUmUsolYph6w0Ui_bKZEO',
+    type: 'Competitive Singles',
+    timeString: '2h ago',
+    result: 'W',
+    scores: '11-8, 11-5',
+    eloChange: 15,
+    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'match_2',
+    opponentId: 'elena_v',
+    opponentName: 'Elena V.',
+    type: 'Friendly Tournament',
+    timeString: '5h ago',
+    result: 'L',
+    scores: '9-11, 11-13',
+    eloChange: -12,
+    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+  }
+];
+
+export const INITIAL_CHALLENGES: Challenge[] = [
+  {
+    id: 'chall_1',
+    challengerId: 'elena_v',
+    challengerName: 'Elena V.',
+    challengerAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAVwaI0QvUg2fMiuO1ugifD4U6t-RiswVObbTC8Qh6QTdiIu62Cs2kLFh9ccNp0Xi4ZPyM0lwpQt3K8Ix3T4YquLNLqK4p67puWEz4K3i95U0SqwPqq6LVbr_Si20Dd2GSepAAEOxX2xoWag10ZpA3gNbbQ0h82hKugH_HC_Hyy8DFnkONtZwoYtpDTgu1KL9mMWKwTIo2DMLTo2xd8nPutZh2ULnaDTCygBT_dzMAlvId_HrDuweq7Xlsm81tegO5UVsAB5j_YOyEV',
+    challengerRank: 'Rank #1',
+    challengerTier: 'Grandmaster',
+    opponentId: 'alex_rivers',
+    opponentName: 'Alex Rivers',
+    timeString: 'Sunday, 4:00 PM',
+    location: 'Central Park',
+    statusString: 'pending',
+    isIncoming: true,
+    timestamp: '2026-06-11T16:00:00Z'
+  },
+  {
+    id: 'chall_2',
+    challengerId: 'alex_rivers',
+    challengerName: 'Alex Rivers',
+    challengerAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDxI58hgXiMsH1grQINr-F89Ji3n1FHcdb24rpSfu_qKdCAFe166bPVQ8gux6JC_F6Icu5E9bXyRpUeaDuKayrZ-0RAYrcGHcrfSGxYnRqTnDpcNr5Rhj6tN-tlGT-038KtmuksXWBKX8QBEN0E4NEnxOOkMAK-_Jx19ATJODHDFEOFesJIGfQE0u1MALDXqq1G7h_sLxdw9J7WqNG_Y7xofqrMVtN-CSqafqOmGfVII6fwWqM1FR5ndHhjx5w2cIwrXzCb2wCfgOI3',
+    opponentId: 'jordan_p',
+    opponentName: 'Jordan P.',
+    timeString: 'Wednesday, 5:00 PM',
+    location: 'Downtown Arena Court #2',
+    statusString: 'pending',
+    isIncoming: false,
+    timestamp: '2026-06-14T17:00:00Z'
+  }
+];
+
+export const INITIAL_VERIFICATIONS: Verification[] = [
+  {
+    id: 'v_1',
+    title: 'Match ID #8492',
+    type: 'Verified by Admin',
+    status: 'verified',
+    timeAgo: '10m ago'
+  },
+  {
+    id: 'v_2',
+    title: 'Score Verification',
+    type: 'Verified by Opponent',
+    status: 'verified',
+    timeAgo: '1h ago'
+  }
+];
+
+export const CLUB_RULES = [
+  { id: '1', rule: 'All challenges must be accepted or declined within 48 hours.' },
+  { id: '2', rule: 'Matches must be completed within 7 days of acceptance.' },
+  { id: '3', rule: 'Scores must be reported by both players within 2 hours of match completion.' },
+  { id: '4', rule: 'Cancellation within 24 hours of match time results in a 10 ELO penalty.' }
+];
+
+export const STATS_METRICS = {
+  globalAvgElo: 2696,
+  globalAvgEloChange: '+1.8%',
+  activeChallengersToday: 3,
+  seasonRemainingDays: 12,
+  seasonRemainingHours: 4
+};
+
+export const INITIAL_NOTIFICATIONS = [
+  {
+    id: 'notif_1',
+    title: 'Welcome to the Club',
+    message: 'You have successfully logged in as Alex Rivers (Superadmin). Use the dashboard to manage players, matches, and challenges.',
+    time: '2 hours ago',
+    unread: true
+  }
+];
