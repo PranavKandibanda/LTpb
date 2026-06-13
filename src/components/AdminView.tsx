@@ -16,7 +16,6 @@ import {
   UserX, 
   FileText, 
   UserPlus,
-  Trophy,
   Copy
 } from 'lucide-react';
 import { Player, Challenge, MatchActivity, Verification, AuditLog } from '../types';
@@ -25,7 +24,6 @@ import { UserRepository } from '../repositories/UserRepository';
 import { ChallengeRepository } from '../repositories/ChallengeRepository';
 import { NotificationRepository } from '../repositories/NotificationRepository';
 import { AuditLogRepository } from '../repositories/AuditLogRepository';
-import TournamentBuilderView from './TournamentBuilderView';
 
 interface AdminViewProps {
   players: Player[];
@@ -67,7 +65,7 @@ export default function AdminView({
   const isAuthorized = currentUser.role === 'officer' || currentUser.role === 'superadmin';
 
   // State Tabs
-  const [activeTab, setActiveTab ] = useState<'tournaments' | 'approvals' | 'disputes' | 'seasons' | 'users' | 'elo' | 'logs'>('tournaments');
+  const [activeTab, setActiveTab ] = useState<'approvals' | 'disputes' | 'seasons' | 'users' | 'elo' | 'logs'>('approvals');
 
   // Persistence of Audit logs inside localStorage
   const [auditLogs, setAuditLogs] = useState<string[]>(() => {
@@ -546,14 +544,6 @@ export default function AdminView({
       {/* Advanced Tabs Row */}
       <div className="flex border-b border-brand-outline overflow-x-auto no-scrollbar gap-5">
         <button
-          onClick={() => setActiveTab('tournaments')}
-          className={`pb-3 font-semibold text-xs uppercase tracking-wider shrink-0 cursor-pointer bg-transparent border-0 flex items-center gap-1.5 transition-all ${activeTab === 'tournaments' ? 'text-brand-primary border-b-2 border-brand-primary font-black' : 'text-on-surface-variant hover:text-white'}`}
-        >
-          <Trophy className="w-3.5 h-3.5 text-brand-primary" />
-          <span>Bracket Builder</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('approvals')}
           className={`pb-3 font-semibold text-xs uppercase tracking-wider shrink-0 cursor-pointer bg-transparent border-0 flex items-center gap-1.5 transition-all ${activeTab === 'approvals' ? 'text-brand-primary border-b-2 border-brand-primary font-black' : 'text-on-surface-variant hover:text-white'}`}
         >
@@ -614,14 +604,6 @@ export default function AdminView({
 
       {/* Tabs Contents */}
       <div className="bg-brand-surface border border-brand-outline rounded-2xl p-6 min-h-[350px] shadow-2xl">
-        
-        {/* Bracket Builder Tab Content */}
-        {activeTab === 'tournaments' && (
-          <TournamentBuilderView 
-            players={players} 
-            setActiveScreen={setActiveScreen || (() => {})} 
-          />
-        )}
         
         {/* 1. MEMBERSHIP QUEUE APPROVALS */}
         {activeTab === 'approvals' && (
