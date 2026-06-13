@@ -428,17 +428,37 @@ export default function AdminView({
   };
 
   // Submit manual sliders
-  const handleSliderEloSubmit = (e: React.FormEvent) => {
+  const handleSliderEloSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     onUpdatePlayerElo(selectedPlayerId, customElo);
     const pName = players.find(x => x.id === selectedPlayerId)?.name || 'Player';
-    addAuditLog(`Officer adjusted ELO directly for player: ${pName} to ${customElo}.`);
+    await AuditLogRepository.create({
+      id: `audit_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      actorId: currentUser.id,
+      actorName: currentUser.name,
+      action: 'ELO_ADJUSTMENT',
+      details: `Superadmin adjusted ELO for ${pName} to ${customElo}.`
+    });
+    // Notify all admins
+    const admins = players.filter(p => (p.role === 'superadmin' || p.role === 'officer') && p.id !== currentUser.id);
+    await Promise.all(admins.map(admin =>
+      NotificationRepository.create({
+        id: `notif_${Date.now()}_${admin.id}`,
+        userId: admin.id,
+        title: 'ELO Adjustment',
+        message: `${currentUser.name} adjusted ${pName}'s rating to ${customElo} ELO.`,
+        time: 'Just now',
+        createdAt: new Date().toISOString(),
+        unread: true
+      })
+    ));
     setSuccessMsg(`Successfully set rating for ${pName} to ${customElo} ELO!`);
     setTimeout(() => setSuccessMsg(null), 4000);
   };
 
   // Sandbox match logging
-  const handleSandboxLogMatch = (e: React.FormEvent) => {
+  const handleSandboxLogMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (matchPlayer1 === matchPlayer2) {
       alert("Please select distinct players to audit matches.");
@@ -458,7 +478,27 @@ export default function AdminView({
     const p2Name = players.find(x => x.id === matchPlayer2)?.name || 'P2';
     const winName = sandboxWinnerId === matchPlayer1 ? p1Name : p2Name;
 
-    addAuditLog(`Logged Match Audit: ${p1Name} vs ${p2Name} (${set1Score}, ${set2Score}). Winner: ${winName}. Elo Exchange: ${sandboxEloChange}.`);
+    await AuditLogRepository.create({
+      id: `audit_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      actorId: currentUser.id,
+      actorName: currentUser.name,
+      action: 'MATCH_LOG',
+      details: `Superadmin logged match: ${p1Name} vs ${p2Name} (${set1Score}, ${set2Score}). Winner: ${winName}.`
+    });
+    // Notify all admins
+    const admins = players.filter(p => (p.role === 'superadmin' || p.role === 'officer') && p.id !== currentUser.id);
+    await Promise.all(admins.map(admin =>
+      NotificationRepository.create({
+        id: `notif_${Date.now()}_${admin.id}`,
+        userId: admin.id,
+        title: 'Match Logged',
+        message: `${currentUser.name} logged a match: ${p1Name} vs ${p2Name}. Winner: ${winName}.`,
+        time: 'Just now',
+        createdAt: new Date().toISOString(),
+        unread: true
+      })
+    ));
     setSuccessMsg(`Simulated Match Logged! ${winName} won against ${sandboxWinnerId === matchPlayer1 ? p2Name : p1Name}. ELO calculated and synchronized.`);
     setTimeout(() => setSuccessMsg(null), 5000);
   };
@@ -550,9 +590,12 @@ export default function AdminView({
           <UserPlus className="w-3.5 h-3.5" />
           <span>Pending Approvals</span>
           {pendingUsers.length > 0 && (
-            <span className="bg-brand-primary text-black font-extrabold px-1.5 py-0.5 text-[9px] rounded font-mono">
-              {pendingUsers.length}
-            </span>
+            <>
+              <span className="w-2 h-2 bg-brand-primary-container rounded-full animate-pulse"></span>
+              <span className="bg-brand-primary text-black font-extrabold px-1.5 py-0.5 text-[9px] rounded font-mono">
+                {pendingUsers.length}
+              </span>
+            </>
           )}
         </button>
 
@@ -563,9 +606,12 @@ export default function AdminView({
           <AlertCircle className="w-3.5 h-3.5 text-brand-secondary" />
           <span>Match Disputes</span>
           {disputedChallenges.length > 0 && (
-            <span className="bg-brand-secondary text-black font-extrabold px-1.5 py-0.5 text-[9px] rounded font-mono">
-              {disputedChallenges.length}
-            </span>
+            <>
+              <span className="w-2 h-2 bg-brand-primary-container rounded-full animate-pulse"></span>
+              <span className="bg-brand-secondary text-black font-extrabold px-1.5 py-0.5 text-[9px] rounded font-mono">
+                {disputedChallenges.length}
+              </span>
+            </>
           )}
         </button>
 
@@ -585,13 +631,15 @@ export default function AdminView({
           <span>User Management</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('elo')}
-          className={`pb-3 font-semibold text-xs uppercase tracking-wider shrink-0 cursor-pointer bg-transparent border-0 flex items-center gap-1.5 transition-all ${activeTab === 'elo' ? 'text-brand-primary border-b-2 border-brand-primary font-black' : 'text-on-surface-variant hover:text-white'}`}
-        >
-          <TrendingUp className="w-3.5 h-3.5" />
-          <span>Elo Adjustments</span>
-        </button>
+        {currentUser.role === 'superadmin' && (
+          <button
+            onClick={() => setActiveTab('elo')}
+            className={`pb-3 font-semibold text-xs uppercase tracking-wider shrink-0 cursor-pointer bg-transparent border-0 flex items-center gap-1.5 transition-all ${activeTab === 'elo' ? 'text-brand-primary border-b-2 border-brand-primary font-black' : 'text-on-surface-variant hover:text-white'}`}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Elo Adjustments</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('logs')}
@@ -863,7 +911,7 @@ export default function AdminView({
         )}
 
         {/* 5. DIRECT ELO RATING SLIDERS */}
-        {activeTab === 'elo' && (
+        {activeTab === 'elo' && currentUser.role === 'superadmin' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Quick adjust rating */}
