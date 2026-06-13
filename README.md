@@ -1,20 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Lake Travis Pickleball Club — ELO Tracker
 
-# Run and deploy your AI Studio app
+Pro-tracker platform for pickleball performance analytics and club elo rankings.
 
-This contains everything you need to run your app locally.
+**Hosted:** https://ltpickleball.vercel.app
 
-View your app in AI Studio: https://ai.studio/apps/c90f6e6d-5a96-4bff-86e6-c5c03f9f6147
+## Stack
 
-## Run Locally
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS
+- **Backend:** Firebase (Auth, Firestore)
+- **Hosting:** Vercel
 
-**Prerequisites:**  Node.js
+## Features
 
+- Email/password authentication
+- ELO rating system with K-factors, margin-of-victory, and anti-farming rules
+- Challenge system (create, accept, submit scores, verify, dispute)
+- Leaderboard with tier rankings
+- Season management and medal awards
+- Admin panel for user management and manual adjustments
+- Avatar system with 20 custom cartoon portraits
+- Admin approval for new members
+- Password reset via email
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Development
+
+```bash
+npm install
+npm run dev       # local dev server on :3000
+npm run build     # production build
+npm run lint      # type-check only
+```
+
+## Firestore Rules
+
+Deploy rules from `firestore.rules` to the Firebase project via Console or CLI.

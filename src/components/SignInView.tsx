@@ -10,7 +10,7 @@ import {
   Mail,
   Check
 } from 'lucide-react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import { generateAvatars } from '../avatarGenerator';
 
@@ -28,7 +28,28 @@ export default function SignInView({ onSelectAvatar }: SignInViewProps) {
   const [statusMessage, setStatusMessage] = useState('SECURE CONNECTION ESTABLISHED - TERMINAL V1.0.2');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
   const avatarList = useMemo(() => generateAvatars(), []);
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Enter your email address first.');
+      return;
+    }
+    setError(null);
+    setResetSent(false);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setStatusMessage('RESET EMAIL SENT - CHECK INBOX');
+    } catch (err: any) {
+      const msg = err.code
+        ? err.code.replace('auth/', '').replace(/-/g, ' ')
+        : err.message || 'Failed to send reset email';
+      setStatusMessage(`RESET FAILED - ${msg.toUpperCase()}`);
+      setError(msg);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,6 +220,16 @@ export default function SignInView({ onSelectAvatar }: SignInViewProps) {
               <div className="space-y-2">
                 <div className="flex justify-between items-center select-none text-[10px] font-bold uppercase tracking-wider">
                   <label className="text-white font-sans">Password</label>
+                  {mode === 'signin' && (
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="text-brand-primary hover:underline bg-transparent border-0 cursor-pointer font-bold"
+                      disabled={loading}
+                    >
+                      Forgot?
+                    </button>
+                  )}
                 </div>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant/60 group-focus-within:text-brand-primary transition-colors" />
@@ -267,6 +298,13 @@ export default function SignInView({ onSelectAvatar }: SignInViewProps) {
               {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-none text-[11px] leading-snug">
                   {error}
+                </div>
+              )}
+
+              {/* Password reset sent confirmation */}
+              {resetSent && (
+                <div className="p-3 bg-brand-primary/10 border border-brand-primary/20 text-brand-primary rounded-none text-[11px] leading-snug">
+                  Password reset email sent. Check your inbox (and spam folder).
                 </div>
               )}
 

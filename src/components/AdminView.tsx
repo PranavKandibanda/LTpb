@@ -16,7 +16,8 @@ import {
   UserX, 
   FileText, 
   UserPlus,
-  Trophy
+  Trophy,
+  Copy
 } from 'lucide-react';
 import { Player, Challenge, MatchActivity, Verification } from '../types';
 import { calculateEloExchange, checkAntiFarming } from '../eloService';
@@ -559,18 +560,24 @@ export default function AdminView({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {pendingUsers.map(p => (
-                  <div key={p.id} className="bg-brand-surface-low border border-brand-outline p-4 rounded-xl flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded bg-brand-surface-high border border-brand-outline flex items-center justify-center text-[#ccff80] font-black text-sm">
+                  <div key={p.id} className="bg-brand-surface-low border border-brand-outline p-4 rounded-xl flex items-center gap-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded shrink-0 bg-brand-surface-high border border-brand-outline flex items-center justify-center text-[#ccff80] font-black text-sm">
                         {p.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="text-left">
-                        <h4 className="text-sm font-black text-white">{p.name}</h4>
-                        <span className="text-[10px] text-on-surface-variant font-mono block mt-0.5">ID: {p.id}</span>
+                      <div className="text-left min-w-0">
+                        <h4 className="text-sm font-black text-white truncate">{p.name}</h4>
+                        <div className="group relative inline-flex items-center gap-1 mt-0.5 max-w-full">
+                          <span className="text-[10px] text-on-surface-variant font-mono truncate block">ID: {p.id}</span>
+                          <Copy
+                            onClick={() => navigator.clipboard.writeText(p.id)}
+                            className="w-3 h-3 text-brand-primary cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <button
                         onClick={() => handleApproveUser(p)}
                         className="px-3 py-1.5 bg-brand-primary hover:opacity-95 text-black font-extrabold text-[10px] uppercase rounded transition-all cursor-pointer"
