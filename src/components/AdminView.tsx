@@ -559,18 +559,18 @@ export default function AdminView({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {pendingUsers.map(p => (
-                  <div key={p.id} className="bg-brand-surface-low border border-brand-outline p-4 rounded-xl flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded bg-brand-surface-high border border-brand-outline flex items-center justify-center text-[#ccff80] font-black text-sm">
+                  <div key={p.id} className="bg-brand-surface-low border border-brand-outline p-4 rounded-xl flex items-center gap-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded shrink-0 bg-brand-surface-high border border-brand-outline flex items-center justify-center text-[#ccff80] font-black text-sm">
                         {p.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="text-left">
-                        <h4 className="text-sm font-black text-white">{p.name}</h4>
-                        <span className="text-[10px] text-on-surface-variant font-mono block mt-0.5">ID: {p.id}</span>
+                      <div className="text-left min-w-0">
+                        <h4 className="text-sm font-black text-white truncate">{p.name}</h4>
+                        <span className="text-[10px] text-on-surface-variant font-mono block mt-0.5 truncate">ID: {p.id}</span>
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <button
                         onClick={() => handleApproveUser(p)}
                         className="px-3 py-1.5 bg-brand-primary hover:opacity-95 text-black font-extrabold text-[10px] uppercase rounded transition-all cursor-pointer"
