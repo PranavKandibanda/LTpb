@@ -39,6 +39,8 @@ import ProfileView from './components/ProfileView';
 import NotificationsView from './components/NotificationsView';
 import AdminView from './components/AdminView';
 import SignInView from './components/SignInView';
+import PendingApprovalView from './components/PendingApprovalView';
+import SuspendedView from './components/SuspendedView';
 import TournamentBuilderView from './components/TournamentBuilderView';
 
 export default function App() {
@@ -191,7 +193,7 @@ export default function App() {
   // Accept a pending incoming challenge
   const handleAcceptChallenge = async (challengeId: string) => {
     try {
-      await ChallengeService.acceptChallenge(challengeId);
+      await ChallengeService.acceptChallenge(challengeId, currentUser?.id);
       
       const challengeObj = challenges.find(c => c.id === challengeId);
       if (challengeObj) {
@@ -563,6 +565,14 @@ export default function App() {
         </p>
       </div>
     );
+  }
+
+  if (currentUser.status === 'pending') {
+    return <PendingApprovalView />;
+  }
+
+  if (currentUser.status === 'suspended') {
+    return <SuspendedView />;
   }
 
   return (

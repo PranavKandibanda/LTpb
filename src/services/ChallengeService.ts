@@ -30,6 +30,9 @@ export class ChallengeService {
     if (!challenger) throw new Error('Challenger profile not found.');
     if (!opponent) throw new Error('Opponent profile not found.');
 
+    if (challenger.status !== 'active') throw new Error('Your account is not active. Please wait for admin approval.');
+    if (opponent.status !== 'active') throw new Error('Opponent account is not active.');
+
     const challengeId = `chall_${Date.now()}`;
     const newChallenge: Challenge = {
       id: challengeId,
@@ -58,9 +61,14 @@ export class ChallengeService {
     }
   }
 
-  static async acceptChallenge(challengeId: string): Promise<void> {
+  static async acceptChallenge(challengeId: string, acceptingUserId?: string): Promise<void> {
     const challenge = await ChallengeRepository.getById(challengeId);
     if (!challenge) throw new Error('Challenge not found.');
+
+    if (acceptingUserId) {
+      const accepter = await UserRepository.getById(acceptingUserId);
+      if (accepter && accepter.status !== 'active') throw new Error('Your account is not active.');
+    }
 
     await ChallengeRepository.update(challengeId, { statusString: 'accepted' });
 
@@ -91,6 +99,9 @@ export class ChallengeService {
   }): Promise<void> {
     const challenge = await ChallengeRepository.getById(params.challengeId);
     if (!challenge) throw new Error('Challenge not found.');
+
+    const submitter = await UserRepository.getById(params.submittedById);
+    if (submitter && submitter.status !== 'active') throw new Error('Your account is not active.');
 
     // Validate scores formatting
     const validation = MatchValidationService.validateScoreFormat(params.scores);
@@ -163,6 +174,9 @@ export class ChallengeService {
     if (!challenge) throw new Error('Challenge not found.');
 
     // Validate scores or override scores
+    const officer = await UserRepository.getById(params.officerId);
+    if (officer && officer.status !== 'active') throw new Error('Officer account is not active.');
+
     const validation = MatchValidationService.validateScoreFormat(params.overrideScores);
     if (!validation.isValid) {
       throw new Error(validation.error || 'Invalid scores format.');
