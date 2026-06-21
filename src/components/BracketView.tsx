@@ -7,7 +7,8 @@ import {
   Sparkles,
   Users,
   Share2,
-  ExternalLink
+  ExternalLink,
+  Radio
 } from 'lucide-react';
 import { BracketData } from '../types';
 import { BracketRepository } from '../repositories/BracketRepository';
@@ -23,29 +24,25 @@ export default function BracketView({ bracketId, onBack }: BracketViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
 
+  // Real-time subscription to bracket changes
   useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await BracketRepository.getById(bracketId);
-        if (!data) {
-          setError('Bracket not found.');
-          setLoading(false);
-          return;
-        }
-        const now = new Date().toISOString();
-        if (data.expiresAt < now) {
-          setExpired(true);
-          setBracket(data);
-          setLoading(false);
-          return;
-        }
-        setBracket(data);
-      } catch {
-        setError('Failed to load bracket.');
+    const unsub = BracketRepository.subscribe(bracketId, (data) => {
+      if (data === null) {
+        setError('Bracket not found.');
+        setLoading(false);
+        return;
       }
+      const now = new Date().toISOString();
+      if (data.expiresAt < now) {
+        setExpired(true);
+        setBracket(data);
+        setLoading(false);
+        return;
+      }
+      setBracket(data);
       setLoading(false);
-    };
-    load();
+    });
+    return () => unsub();
   }, [bracketId]);
 
   if (loading) {
@@ -192,9 +189,10 @@ export default function BracketView({ bracketId, onBack }: BracketViewProps) {
             <Sparkles className="w-4 h-4 text-brand-primary" />
             <span>Court Matrix Grid</span>
           </h4>
-          <span className="text-[9px] text-on-surface-variant">
-            Shared bracket — read-only view
-          </span>
+                        <span className="text-[9px] text-on-surface-variant flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                          Live
+                        </span>
         </div>
 
         <div className="flex gap-8 py-4 px-1 min-w-[700px] select-none justify-between items-stretch">

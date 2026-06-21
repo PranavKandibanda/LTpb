@@ -3,13 +3,13 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   deleteDoc,
   getDocs,
   query,
   where,
-  orderBy,
-  limit,
-  Timestamp
+  onSnapshot,
+  Unsubscribe
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { BracketData } from '../types';
@@ -32,6 +32,20 @@ export class BracketRepository {
     }
   }
 
+  static subscribe(id: string, callback: (data: BracketData | null) => void): Unsubscribe {
+    const docRef = doc(db, this.collectionName, id);
+    return onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.data() as BracketData);
+      } else {
+        callback(null);
+      }
+    }, (error) => {
+      console.warn('Bracket subscription error:', error);
+      callback(null);
+    });
+  }
+
   static async create(data: BracketData): Promise<void> {
     try {
       const docRef = doc(db, this.collectionName, data.id);
@@ -45,6 +59,15 @@ export class BracketRepository {
     }
   }
 
+  static async updateWinners(id: string, winnersMap: Record<string, { id: string; name: string; elo: number }>): Promise<void> {
+    try {
+      const docRef = doc(db, this.collectionName, id);
+      await updateDoc(docRef, { winnersMap });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `${this.collectionName}/${id}`);
+    }
+  }
+
   static async delete(id: string): Promise<void> {
     try {
       const docRef = doc(db, this.collectionName, id);
@@ -54,25 +77,23 @@ export class BracketRepository {
     }
   }
 
-  static async cleanupExpired(): Promise<number> {
+  static async cleanupExpired(): Promise<void> {
     try {
       const now = new Date().toISOString();
       const q = query(
         collection(db, this.collectionName),
-        where('expiresAt', '<', now),
-        orderBy('expiresAt'),
-        limit(50)
+        where('expiresAt', '<', now)
       );
       const snapshot = await getDocs(q);
-      let count = 0;
-      snapshot.forEach(docSnap => {
-        deleteDoc(docSnap.ref);
-        count++;
-      });
-      return count;
+      for (const docSnap of snapshot.docs) {
+        try {
+          await deleteDoc(docSnap.ref);
+        } catch (e) {
+          console.warn('Failed to delete expired bracket', docSnap.id, e);
+        }
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `${this.collectionName}/cleanup`);
-      return 0;
+      console.warn('Bracket cleanup skipped:', error);
     }
   }
 

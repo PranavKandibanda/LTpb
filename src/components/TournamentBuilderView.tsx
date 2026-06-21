@@ -45,8 +45,15 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
   const [assigningSeed, setAssigningSeed] = useState<number | null>(null);
   const [tempP1, setTempP1] = useState<Player | null>(null);
 
-  // Selected competitors array for Solo mode
+  // Selected competitors array for Solo mode (unordered participant list)
   const [selectedSoloIds, setSelectedSoloIds] = useState<string[]>([]);
+
+  // Random draw state: after draw, these hold the shuffled seed order
+  const [drawOrder, setDrawOrder] = useState<string[] | null>(null);
+  const [drawDone, setDrawDone] = useState(false);
+
+  // Published bracket state (live-syncs winners to Firestore)
+  const [publishedBracketId, setPublishedBracketId] = useState<string | null>(null);
 
   // Bracket state representation: round winner maps
   // Key: `${roundIdx}-${matchIdx}`, Value: winner competitor object (Player or DuoTeam)
@@ -61,8 +68,17 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
     setSelectedSoloIds([]);
     setCustomDuoSlots({});
     setWinnersMap({});
+    setDrawOrder(null);
+    setDrawDone(false);
+    setPublishedBracketId(null);
     setTempP1(null);
     setAssigningSeed(null);
+  };
+
+  const resetDraw = () => {
+    setDrawOrder(null);
+    setDrawDone(false);
+    setWinnersMap({});
   };
 
   // Switch modes
@@ -83,7 +99,7 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
 
   // Toggle competitor added (Solo mode only)
   const toggleSoloCompetitor = (id: string) => {
-    resetWinners();
+    resetDraw();
     if (selectedSoloIds.includes(id)) {
       setSelectedSoloIds(selectedSoloIds.filter(x => x !== id));
     } else {
@@ -93,11 +109,16 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
     }
   };
 
-  // Get selected competitors sorted by ELO (this forms the Seeds: seed 1 is largest ELO...)
+  // Get selected competitors in the drawn seed order (after Random Draw)
+  // Before the draw, returns empty array so the bracket stays empty
   const getSeededCompetitors = () => {
     if (mode === 'solo') {
-      const items = activeSoloPlayers.filter(p => selectedSoloIds.includes(p.id));
-      return [...items].sort((a, b) => b.elo - a.elo);
+      if (drawOrder) {
+        return drawOrder
+          .map(id => activeSoloPlayers.find(p => p.id === id))
+          .filter((p): p is Player => p !== undefined);
+      }
+      return [];
     }
     return [];
   };
@@ -298,10 +319,10 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
     });
   };
 
-  // Randomize the bracket seeding
-  const handleRandomize = () => {
+  // Random Draw: shuffle selected participants and assign bracket seeds
+  const handleRandomDraw = () => {
     if (!isFilled) return;
-    resetWinners();
+    setWinnersMap({});
 
     if (mode === 'solo') {
       const shuffled = [...selectedSoloIds];
@@ -309,7 +330,8 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      setSelectedSoloIds(shuffled);
+      setDrawOrder(shuffled);
+      setDrawDone(true);
     } else {
       const entries: [string, { p1: Player | null; p2: Player | null }][] = Object.entries(customDuoSlots);
       const completeSlots: { key: number; p1: Player; p2: Player }[] = [];
@@ -328,19 +350,21 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
         reindexed[idx + 1] = { p1: slot.p1, p2: slot.p2 };
       });
       setCustomDuoSlots(reindexed);
+      setDrawDone(true);
     }
   };
 
   // Build bracket data for publishing
   const buildBracketData = (): BracketData => {
     const slots: BracketSlot[] = [];
+    const seeded = getSeededCompetitors();
     for (let seed = 1; seed <= bracketSize; seed++) {
       if (mode === 'solo') {
-        const player = activeSoloPlayers.find(p => selectedSoloIds.includes(p.id) && seededCompetitors[selectedSoloIds.indexOf(p.id)] === p);
+        const competitor = seeded[seed - 1];
         slots.push({
           seedNumber: seed,
-          p1: seededCompetitors[seed - 1]
-            ? { id: seededCompetitors[seed - 1].id, name: seededCompetitors[seed - 1].name, elo: seededCompetitors[seed - 1].elo, avatar: seededCompetitors[seed - 1].avatar }
+          p1: competitor
+            ? { id: competitor.id, name: competitor.name, elo: competitor.elo, avatar: competitor.avatar }
             : null,
           p2: null,
         });
@@ -383,18 +407,30 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
     try {
       const data = buildBracketData();
       await BracketRepository.create(data);
+      setPublishedBracketId(data.id);
       const url = `${window.location.origin}${window.location.pathname}?bracketId=${data.id}`;
       try {
         await navigator.clipboard.writeText(url);
-        alert(`Bracket published! Shareable link copied to clipboard.\n\n${url}`);
+        alert(`Bracket published! Shareable link copied to clipboard. Winners will sync live.\n\n${url}`);
       } catch {
-        prompt('Bracket published! Copy this link to share:', url);
+        prompt('Bracket published! Copy this link to share:\n\n' + url);
       }
     } catch (err) {
       console.error('Failed to publish bracket', err);
-      alert('Failed to publish bracket. Check console for details.');
+      alert('Failed to publish bracket. Make sure Firestore rules are deployed with the brackets collection rule.');
     }
   };
+
+  // Live-sync winners to Firestore whenever they change (after publish)
+  useEffect(() => {
+    if (!publishedBracketId) return;
+    const cleanWinnersMap: Record<string, { id: string; name: string; elo: number }> = {};
+    for (const [key, winner] of Object.entries(winnersMap)) {
+      const w = winner as { id: string; name: string; elo: number };
+      cleanWinnersMap[key] = { id: w.id, name: w.name, elo: w.elo };
+    }
+    BracketRepository.updateWinners(publishedBracketId, cleanWinnersMap);
+  }, [winnersMap, publishedBracketId]);
 
   // Cleanup expired brackets on mount
   useEffect(() => {
@@ -521,7 +557,7 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
           </button>
           
           <button
-            onClick={handleRandomize}
+            onClick={handleRandomDraw}
             disabled={!isFilled}
             className={`${
               isFilled
@@ -530,20 +566,23 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
             } border text-[10px] uppercase font-bold tracking-wider px-3.5 py-3 rounded-xl flex items-center gap-1.5 select-none transition-all`}
           >
             <Shuffle className="w-3.5 h-3.5 text-brand-primary" />
-            <span>Randomize</span>
+            <span>Random Draw</span>
           </button>
 
           <button
-            onClick={handlePublishBracket}
-            disabled={!isFilled}
+            onClick={publishedBracketId ? undefined : handlePublishBracket}
+            disabled={!isFilled || !drawDone}
             className={`${
-              isFilled
-                ? 'bg-brand-primary/10 hover:bg-brand-primary/20 border-brand-primary/40 hover:border-brand-primary text-brand-primary cursor-pointer'
+              isFilled && drawDone
+                ? publishedBracketId
+                  ? 'bg-brand-primary/20 border-brand-primary text-brand-primary cursor-default'
+                  : 'bg-brand-primary/10 hover:bg-brand-primary/20 border-brand-primary/40 hover:border-brand-primary text-brand-primary cursor-pointer'
                 : 'bg-[#0f1115] border-[#1A1D23] text-on-surface-variant/40 cursor-not-allowed'
             } border text-[10px] uppercase font-bold tracking-wider px-3.5 py-3 rounded-xl flex items-center gap-1.5 select-none transition-all`}
           >
+            <span className={`w-2 h-2 rounded-full ${publishedBracketId ? 'bg-green-400 animate-pulse' : 'bg-transparent'}`} />
             <Globe className="w-3.5 h-3.5" />
-            <span>Publish</span>
+            <span>{publishedBracketId ? 'Live' : 'Publish'}</span>
           </button>
 
           <button
@@ -571,9 +610,9 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
                   <Users className="w-4 h-4 text-brand-primary" />
                   <span>Configure Singles</span>
                 </h4>
-                <p className="text-[10px] text-on-surface-variant mt-0.5">
-                  Tap active club players to populate seeds. Sorted and paired automatically by player ELO.
-                </p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5">
+                    Select tournament participants from the club roster, then click Random Draw to assign bracket seeds fairly.
+                  </p>
               </div>
 
               {/* member finder */}
@@ -766,15 +805,39 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
                 <span>Court Matrix Grid</span>
               </h4>
               <p className="text-[10px] text-on-surface-variant">
-                {mode === 'solo' 
-                  ? 'Click seeded players to advance them to the next match. Champions are tracked live.' 
-                  : 'Click empty cells in Match #1 to pair players instantly, then advance winners.'
+                {drawDone
+                  ? (mode === 'solo'
+                    ? 'Click seeded players to advance them to the next match. Champions are tracked live.'
+                    : 'Click empty cells in Match #1 to pair players instantly, then advance winners.')
+                  : 'Fill the participant list and run the Random Draw to populate the bracket.'
                 }
               </p>
             </div>
           </div>
 
           {/* DYNAMIC DRAWING COMPARTMENT */}
+          {!drawDone && isFilled ? (
+            /* Waiting for draw state */
+            <div className="flex items-center justify-center py-16 flex-col gap-4">
+              <Shuffle className="w-12 h-12 text-brand-primary/40 animate-pulse" />
+              <p className="text-on-surface-variant text-sm font-bold uppercase tracking-wider">
+                Participants Selected
+              </p>
+              <p className="text-on-surface-variant/60 text-[11px] max-w-xs text-center">
+                Click <strong className="text-brand-primary">Random Draw</strong> above to shuffle and assign bracket seeds fairly.
+              </p>
+            </div>
+          ) : !isFilled ? (
+            <div className="flex items-center justify-center py-16 flex-col gap-4">
+              <Trophy className="w-12 h-12 text-on-surface-variant/30" />
+              <p className="text-on-surface-variant/50 text-sm font-bold uppercase tracking-wider">
+                No Participants Yet
+              </p>
+              <p className="text-on-surface-variant/40 text-[11px] max-w-xs text-center">
+                Select {bracketSize} {mode === 'solo' ? 'players' : 'teams'} on the left panel, then run the Random Draw.
+              </p>
+            </div>
+          ) : (
           <div className="flex gap-8 py-4 px-1 min-w-[700px] select-none justify-between items-stretch">
             
             {/* Rounds Generation columns */}
@@ -935,6 +998,7 @@ export default function TournamentBuilderView({ players, setActiveScreen, curren
             </div>
 
           </div>
+          )}
 
         </div>
 

@@ -29,6 +29,7 @@ import { ChallengeService } from './services/ChallengeService';
 import { NotificationService } from './services/NotificationService';
 
 import { generateAvatars } from './avatarGenerator';
+import { INITIAL_PLAYERS } from './mockData';
 import AvatarPicker from './components/AvatarPicker';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -167,6 +168,20 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [authUser]);
+
+  // Seed mock players into Firestore if collection is empty
+  useEffect(() => {
+    if (!authUser || players.length > 0) return;
+    const seed = async () => {
+      for (const player of INITIAL_PLAYERS) {
+        const existing = await UserRepository.getById(player.id);
+        if (!existing) {
+          await UserRepository.create(player);
+        }
+      }
+    };
+    seed();
+  }, [authUser, players.length]);
 
   useEffect(() => {
     if (!authUser) return;
