@@ -42,6 +42,7 @@ import SignInView from './components/SignInView';
 import PendingApprovalView from './components/PendingApprovalView';
 import SuspendedView from './components/SuspendedView';
 import TournamentBuilderView from './components/TournamentBuilderView';
+import BracketView from './components/BracketView';
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('dashboard');
@@ -66,6 +67,19 @@ export default function App() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const avatarList = useMemo(() => generateAvatars(), []);
   const pendingAvatar = useRef('');
+
+  // Shared bracket view state
+  const [bracketId, setBracketId] = useState<string | null>(null);
+
+  // Parse ?bracketId=xxx from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('bracketId');
+    if (id) {
+      setBracketId(id);
+      setActiveScreen('bracket-view');
+    }
+  }, []);
 
   // New challenge creation modal state
   const [showChallengeModal, setShowChallengeModal] = useState(false);
@@ -518,11 +532,29 @@ export default function App() {
             setActiveScreen={setActiveScreen}
           />
         );
+      case 'bracket-view':
+        return bracketId ? (
+          <BracketView
+            bracketId={bracketId}
+            onBack={() => {
+              setBracketId(null);
+              setActiveScreen('dashboard');
+              // Clean URL
+              const url = new URL(window.location.href);
+              url.searchParams.delete('bracketId');
+              window.history.replaceState({}, '', url.toString());
+            }}
+          />
+        ) : (
+          <div className="text-center py-12 text-on-surface-variant">No bracket specified.</div>
+        );
+
       case 'tournament-builder':
         return (
           <TournamentBuilderView
             players={players}
             setActiveScreen={setActiveScreen}
+            currentUser={currentUser}
           />
         );
       default:
@@ -535,6 +567,7 @@ export default function App() {
     if (activeScreen === 'dashboard') return 'Dashboard Hub';
     if (activeScreen === 'profile') return `${selectedPlayerForProfile?.name ?? 'Player'} Stats`;
     if (activeScreen === 'tournament-builder') return 'Bracket Builder';
+    if (activeScreen === 'bracket-view') return 'Shared Bracket';
     return activeScreen;
   };
 

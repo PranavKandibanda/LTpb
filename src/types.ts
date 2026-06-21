@@ -117,4 +117,23 @@ export interface Verification {
   timeAgo: string;
 }
 
-export type ActiveScreen = 'dashboard' | 'leaderboard' | 'challenges' | 'notifications' | 'profile' | 'admin' | 'tournament-builder';
+export interface BracketSlot {
+  seedNumber: number;
+  p1: { id: string; name: string; elo: number; avatar?: string } | null;
+  p2: { id: string; name: string; elo: number; avatar?: string } | null;
+}
+
+export interface BracketData {
+  id: string;
+  tournamentName: string;
+  mode: 'solo' | 'duo';
+  bracketSize: 8 | 16 | 32;
+  slots: BracketSlot[];
+  winnersMap: Record<string, { id: string; name: string; elo: number }>;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export type ActiveScreen = 'dashboard' | 'leaderboard' | 'challenges' | 'notifications' | 'profile' | 'admin' | 'tournament-builder' | 'bracket-view';

@@ -9,9 +9,12 @@ import {
   Save, 
   Sparkles, 
   PartyPopper,
-  AlertCircle
+  AlertCircle,
+  Shuffle,
+  Globe
 } from 'lucide-react';
-import { Player } from '../types';
+import { Player, BracketData, BracketSlot } from '../types';
+import { BracketRepository } from '../repositories/BracketRepository';
 
 interface DuoTeam {
   id: string;
@@ -24,9 +27,10 @@ interface DuoTeam {
 interface TournamentBuilderViewProps {
   players: Player[];
   setActiveScreen: (screen: any) => void;
+  currentUser: Player | null;
 }
 
-export default function TournamentBuilderView({ players, setActiveScreen }: TournamentBuilderViewProps) {
+export default function TournamentBuilderView({ players, setActiveScreen, currentUser }: TournamentBuilderViewProps) {
   // Mode tabs
   const [mode, setMode] = useState<'solo' | 'duo'>('solo');
   const [bracketSize, setBracketSize] = useState<8 | 16 | 32>(8);
@@ -294,6 +298,109 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
     });
   };
 
+  // Randomize the bracket seeding
+  const handleRandomize = () => {
+    if (!isFilled) return;
+    resetWinners();
+
+    if (mode === 'solo') {
+      const shuffled = [...selectedSoloIds];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      setSelectedSoloIds(shuffled);
+    } else {
+      const entries: [string, { p1: Player | null; p2: Player | null }][] = Object.entries(customDuoSlots);
+      const completeSlots: { key: number; p1: Player; p2: Player }[] = [];
+      for (const [key, slot] of entries) {
+        if (slot && slot.p1 && slot.p2) {
+          completeSlots.push({ key: Number(key), p1: slot.p1, p2: slot.p2 });
+        }
+      }
+      const shuffled = [...completeSlots];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const reindexed: Record<number, { p1: Player | null; p2: Player | null }> = {};
+      shuffled.forEach((slot, idx) => {
+        reindexed[idx + 1] = { p1: slot.p1, p2: slot.p2 };
+      });
+      setCustomDuoSlots(reindexed);
+    }
+  };
+
+  // Build bracket data for publishing
+  const buildBracketData = (): BracketData => {
+    const slots: BracketSlot[] = [];
+    for (let seed = 1; seed <= bracketSize; seed++) {
+      if (mode === 'solo') {
+        const player = activeSoloPlayers.find(p => selectedSoloIds.includes(p.id) && seededCompetitors[selectedSoloIds.indexOf(p.id)] === p);
+        slots.push({
+          seedNumber: seed,
+          p1: seededCompetitors[seed - 1]
+            ? { id: seededCompetitors[seed - 1].id, name: seededCompetitors[seed - 1].name, elo: seededCompetitors[seed - 1].elo, avatar: seededCompetitors[seed - 1].avatar }
+            : null,
+          p2: null,
+        });
+      } else {
+        const slot = customDuoSlots[seed];
+        slots.push({
+          seedNumber: seed,
+          p1: slot?.p1 ? { id: slot.p1.id, name: slot.p1.name, elo: slot.p1.elo, avatar: slot.p1.avatar } : null,
+          p2: slot?.p2 ? { id: slot.p2.id, name: slot.p2.name, elo: slot.p2.elo, avatar: slot.p2.avatar } : null,
+        });
+      }
+    }
+
+    const cleanWinnersMap: Record<string, { id: string; name: string; elo: number }> = {};
+    for (const [key, winner] of Object.entries(winnersMap)) {
+      const w = winner as { id: string; name: string; elo: number };
+      cleanWinnersMap[key] = { id: w.id, name: w.name, elo: w.elo };
+    }
+
+    return {
+      id: BracketRepository.generateId(),
+      tournamentName,
+      mode,
+      bracketSize,
+      slots,
+      winnersMap: cleanWinnersMap,
+      createdBy: currentUser?.id || 'unknown',
+      createdByName: currentUser?.name || 'Anonymous',
+      createdAt: new Date().toISOString(),
+      expiresAt: BracketRepository.getExpiresAt(),
+    };
+  };
+
+  // Publish bracket to Firestore and get shareable link
+  const handlePublishBracket = async () => {
+    if (!isFilled) {
+      alert('Fill all bracket slots before publishing.');
+      return;
+    }
+    try {
+      const data = buildBracketData();
+      await BracketRepository.create(data);
+      const url = `${window.location.origin}${window.location.pathname}?bracketId=${data.id}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert(`Bracket published! Shareable link copied to clipboard.\n\n${url}`);
+      } catch {
+        prompt('Bracket published! Copy this link to share:', url);
+      }
+    } catch (err) {
+      console.error('Failed to publish bracket', err);
+      alert('Failed to publish bracket. Check console for details.');
+    }
+  };
+
+  // Cleanup expired brackets on mount
+  useEffect(() => {
+    BracketRepository.cleanupExpired();
+  }, []);
+
   return (
     <div className="space-y-6 text-left animate-fadeIn">
       
@@ -404,7 +511,7 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
         </div>
 
         {/* Options buttons */}
-        <div className="flex items-end gap-2 shrink-0 md:pt-4">
+        <div className="flex items-end gap-2 shrink-0 md:pt-4 flex-wrap">
           <button
             onClick={handleSaveTournamentState}
             className="bg-[#1A1D23] hover:bg-[#252930] border border-[#2D3139] text-white text-[10px] uppercase font-bold tracking-wider px-3.5 py-3 rounded-xl flex items-center gap-1.5 select-none hover:opacity-95 transition-all cursor-pointer"
@@ -413,6 +520,32 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
             <span>Save State</span>
           </button>
           
+          <button
+            onClick={handleRandomize}
+            disabled={!isFilled}
+            className={`${
+              isFilled
+                ? 'bg-[#1A1D23] hover:bg-[#252930] border-[#2D3139] hover:border-brand-primary/40 text-on-surface-variant hover:text-white cursor-pointer'
+                : 'bg-[#0f1115] border-[#1A1D23] text-on-surface-variant/40 cursor-not-allowed'
+            } border text-[10px] uppercase font-bold tracking-wider px-3.5 py-3 rounded-xl flex items-center gap-1.5 select-none transition-all`}
+          >
+            <Shuffle className="w-3.5 h-3.5 text-brand-primary" />
+            <span>Randomize</span>
+          </button>
+
+          <button
+            onClick={handlePublishBracket}
+            disabled={!isFilled}
+            className={`${
+              isFilled
+                ? 'bg-brand-primary/10 hover:bg-brand-primary/20 border-brand-primary/40 hover:border-brand-primary text-brand-primary cursor-pointer'
+                : 'bg-[#0f1115] border-[#1A1D23] text-on-surface-variant/40 cursor-not-allowed'
+            } border text-[10px] uppercase font-bold tracking-wider px-3.5 py-3 rounded-xl flex items-center gap-1.5 select-none transition-all`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Publish</span>
+          </button>
+
           <button
             onClick={handleResetAll}
             className="bg-[#1A1D23] hover:bg-[#252930] border border-[#2D3139] hover:border-red-400/40 text-on-surface-variant hover:text-white text-[10px] uppercase font-bold tracking-wider px-3.5 py-3 rounded-xl flex items-center gap-1.5 select-none transition-all cursor-pointer"
