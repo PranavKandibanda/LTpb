@@ -29,7 +29,8 @@ interface TournamentBuilderViewProps {
 export default function TournamentBuilderView({ players, setActiveScreen }: TournamentBuilderViewProps) {
   // Mode tabs
   const [mode, setMode] = useState<'solo' | 'duo'>('solo');
-  const [bracketSize, setBracketSize] = useState<8 | 16 | 32>(8);
+  const [draftMode, setDraftMode] = useState<'auto' | 'manual'>('auto');
+  const [bracketSize, setBracketSize] = useState(8);
   const [tournamentName, setTournamentName] = useState('Neon Open Invitationals 2026');
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
 
@@ -40,6 +41,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
   const [customDuoSlots, setCustomDuoSlots] = useState<Record<number, { p1: Player | null; p2: Player | null }>>({});
   const [assigningSeed, setAssigningSeed] = useState<number | null>(null);
   const [tempP1, setTempP1] = useState<Player | null>(null);
+
+  // Auto-draft pool for doubles mode (player IDs)
+  const [autoDraftPool, setAutoDraftPool] = useState<string[]>([]);
 
   // Selected competitors array for Solo mode
   const [selectedSoloIds, setSelectedSoloIds] = useState<string[]>([]);
@@ -56,6 +60,7 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
   const handleResetAll = () => {
     setSelectedSoloIds([]);
     setCustomDuoSlots({});
+    setAutoDraftPool([]);
     setWinnersMap({});
     setTempP1(null);
     setAssigningSeed(null);
@@ -64,18 +69,86 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
   // Switch modes
   const handleModeChange = (newMode: 'solo' | 'duo') => {
     setMode(newMode);
+    setDraftMode('auto');
     handleResetAll();
-    // Clear search
     setSearchMemberQuery('');
   };
 
   // Switch size
-  const handleSizeChange = (newSize: 8 | 16 | 32) => {
-    setBracketSize(newSize);
+  const handleSizeChange = (newSize: number) => {
+    setBracketSize(Math.max(2, Math.min(32, newSize)));
     handleResetAll();
-    // Clear search
     setSearchMemberQuery('');
   };
+
+  // Switch draft mode (auto vs manual for doubles)
+  const handleDraftModeChange = (newDraft: 'auto' | 'manual') => {
+    setDraftMode(newDraft);
+    setCustomDuoSlots({});
+    setAutoDraftPool([]);
+    setWinnersMap({});
+    setTempP1(null);
+    setAssigningSeed(null);
+    setSearchMemberQuery('');
+  };
+
+  // Toggle player in auto-draft pool
+  const toggleAutoDraftPlayer = (id: string) => {
+    resetWinners();
+    setCustomDuoSlots({});
+    if (autoDraftPool.includes(id)) {
+      setAutoDraftPool(autoDraftPool.filter(x => x !== id));
+    } else {
+      if (autoDraftPool.length < bracketSize * 2) {
+        const nextPool = [...autoDraftPool, id];
+        setAutoDraftPool(nextPool);
+        // Auto-generate pairs when pool is full
+        if (nextPool.length === bracketSize * 2) {
+          autoGeneratePairs(nextPool);
+        }
+      }
+    }
+  };
+
+  // Auto-generate balanced pairs from a pool of player IDs
+  const autoGeneratePairs = (poolIds: string[]) => {
+    const poolPlayers = poolIds
+      .map(id => activeSoloPlayers.find(p => p.id === id))
+      .filter(Boolean) as Player[];
+    // Sort by ELO descending
+    const sorted = [...poolPlayers].sort((a, b) => b.elo - a.elo);
+    const n = sorted.length / 2;
+    // Pair highest with lowest, 2nd highest with 2nd lowest, etc.
+    const pairs: Record<number, { p1: Player; p2: Player }> = {};
+    for (let i = 0; i < n; i++) {
+      pairs[i + 1] = { p1: sorted[i], p2: sorted[sorted.length - 1 - i] };
+    }
+    // Sort pairs by avg ELO descending for seeding
+    const sortedPairs = Object.entries(pairs)
+      .map(([seed, pair]) => ({
+        seed: Number(seed),
+        avgElo: (pair.p1.elo + pair.p2.elo) / 2,
+        p1: pair.p1,
+        p2: pair.p2
+      }))
+      .sort((a, b) => b.avgElo - a.avgElo);
+    // Assign to seed slots
+    const newSlots: Record<number, { p1: Player | null; p2: Player | null }> = {};
+    sortedPairs.forEach((entry, idx) => {
+      newSlots[idx + 1] = { p1: entry.p1, p2: entry.p2 };
+    });
+    setCustomDuoSlots(newSlots);
+  };
+
+  // Compute next power of 2 >= n
+  const getNextPowerOf2 = (n: number): number => {
+    let p = 1;
+    while (p < n) p *= 2;
+    return p;
+  };
+
+  const actualBracketSize = getNextPowerOf2(bracketSize);
+  const byeCount = actualBracketSize - bracketSize;
 
   // Toggle competitor added (Solo mode only)
   const toggleSoloCompetitor = (id: string) => {
@@ -125,41 +198,52 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
     }
   };
 
-  // Standard tournament pairing order of seeds
-  // Size 8: [1 vs 8, 4 vs 5, 2 vs 7, 3 vs 6]
+  // Standard tournament pairing order — works for any bracket size
   const getSeedPairings = (size: number): [number, number][] => {
-    if (size === 8) {
-      return [
-        [1, 8],
-        [4, 5],
-        [2, 7],
-        [3, 6]
-      ];
-    } else if (size === 16) {
-      return [
-        [1, 16],
-        [8, 9],
-        [5, 12],
-        [4, 13],
-        [3, 14],
-        [6, 11],
-        [7, 10],
-        [2, 15]
-      ];
-    } else {
-      // 32 players
-      const pairings: [number, number][] = [];
-      for (let i = 1; i <= 16; i++) {
-        pairings.push([i, 33 - i]);
+    const actual = getNextPowerOf2(size);
+    const pairings: [number, number][] = [];
+    // Standard recursive bracket seeding for actual size
+    const seeds = Array.from({ length: actual }, (_, i) => i + 1);
+    // Build bracket order via bit-reversal
+    const bracketOrder: number[] = [];
+    const log2 = Math.log2(actual);
+    for (let i = 0; i < actual; i++) {
+      let rev = 0;
+      let x = i;
+      for (let j = 0; j < log2; j++) {
+        rev = (rev << 1) | (x & 1);
+        x >>= 1;
       }
-      return pairings;
+      bracketOrder.push(seeds[rev]);
     }
+    // Pair adjacent elements
+    for (let i = 0; i < actual; i += 2) {
+      pairings.push([bracketOrder[i], bracketOrder[i + 1]]);
+    }
+    return pairings;
   };
 
-  const round1Pairings = getSeedPairings(bracketSize);
+  const allSeedPairings = getSeedPairings(bracketSize);
+
+  // Round 1 pairings include BYE matchups for proper bracket rendering
+  const round1Pairings = allSeedPairings;
+
+  // Seeds that get byes (advance automatically to round 2)
+  const byeSeeds = allSeedPairings
+    .filter(([a, b]) => a > bracketSize || b > bracketSize)
+    .map(([a, b]) => (a <= bracketSize ? a : b));
+
+  // Check if a round 1 matchup is a BYE
+  const isByeMatchup = (pairing: [number, number]): boolean => {
+    return pairing[0] > bracketSize || pairing[1] > bracketSize;
+  };
+
+  // Get the real seed from a BYE matchup
+  const getRealSeedFromBye = (pairing: [number, number]): number => {
+    return pairing[0] <= bracketSize ? pairing[0] : pairing[1];
+  };
 
   // Advanced winners propagation logic
-  // Triggered when clicking a player in the bracket to advance them
   const advanceCompetitor = (roundIdx: number, matchIdx: number, competitor: any) => {
     if (!competitor) return;
 
@@ -168,12 +252,11 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
     // Set the winner for this match
     const nextWinnersMap = { ...winnersMap, [key]: competitor };
 
-    // Clear downstream dependent matches to keep state pristine
-    // roundIdx is 1 for Quarter Finals, 2 for Semi Finals, etc.
+    // Clear downstream dependent matches
     let currentRound = roundIdx + 1;
     let indexToCheck = Math.floor(matchIdx / 2);
 
-    while (currentRound <= Math.log2(bracketSize)) {
+    while (currentRound <= Math.log2(actualBracketSize)) {
       const downstreamKey = `${currentRound}-${indexToCheck}`;
       if (nextWinnersMap[downstreamKey]) {
         delete nextWinnersMap[downstreamKey];
@@ -188,8 +271,8 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
   // Recurse or pull participant for any match position
   const getParticipantForMatch = (roundIdx: number, matchIdx: number): { p1: any | null, p1Seed: number | string, p2: any | null, p2Seed: number | string } => {
     if (roundIdx === 1) {
-      // Round 1 seed pair
       const seeds = round1Pairings[matchIdx];
+      if (!seeds) return { p1: null, p1Seed: '?', p2: null, p2Seed: '?' };
       const competitor1 = getCompetitorBySeed(seeds[0]);
       const competitor2 = getCompetitorBySeed(seeds[1]);
       return {
@@ -200,7 +283,6 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
       };
     }
 
-    // Secondary rounds look at winners of preceding round
     const precedingRound = roundIdx - 1;
     const prevMatch1Index = matchIdx * 2;
     const prevMatch2Index = matchIdx * 2 + 1;
@@ -216,9 +298,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
     };
   };
 
-  // Determine rounds titles based on current bracket size
+  // Determine rounds titles based on actual bracket size
   const getRoundName = (roundIdx: number): string => {
-    const totalRounds = Math.log2(bracketSize);
+    const totalRounds = Math.log2(actualBracketSize);
     const roundsLeft = totalRounds - roundIdx + 1;
 
     if (roundsLeft === 1) return 'FINALS';
@@ -235,15 +317,21 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
   // Number of elements fully resolved
   const addedCount = mode === 'solo' 
     ? selectedSoloIds.length 
-    : Object.keys(customDuoSlots).filter(k => {
-        const slot = customDuoSlots[Number(k)];
-        return slot && slot.p1 && slot.p2;
-      }).length;
+    : mode === 'duo' && draftMode === 'auto'
+      ? Math.floor(autoDraftPool.length / 2)
+      : Object.keys(customDuoSlots).filter(k => {
+          const slot = customDuoSlots[Number(k)];
+          return slot && slot.p1 && slot.p2;
+        }).length;
 
-  const isFilled = addedCount === bracketSize;
+  const isFilled = mode === 'solo'
+    ? selectedSoloIds.length === bracketSize
+    : mode === 'duo' && draftMode === 'auto'
+      ? autoDraftPool.length === bracketSize * 2
+      : addedCount === bracketSize;
 
   // Retrieve overall Champion candidate
-  const totalRoundsCount = Math.log2(bracketSize);
+  const totalRoundsCount = Math.log2(actualBracketSize);
   const champion = winnersMap[`${totalRoundsCount}-0`] || null;
 
   // Save / load config to local storage
@@ -251,17 +339,19 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
     const dataToSave = {
       tournamentName,
       mode,
+      draftMode,
       bracketSize,
       selectedSoloIds,
       customDuoSlots,
+      autoDraftPool,
       winnersMap
     };
-    localStorage.setItem(`pb_tournament_save_${mode}_${bracketSize}`, JSON.stringify(dataToSave));
+    localStorage.setItem(`pb_tournament_save_${mode}_${draftMode}_${bracketSize}`, JSON.stringify(dataToSave));
     alert('Tournament configuration and dynamic partner pairings saved locally!');
   };
 
   useEffect(() => {
-    const saved = localStorage.getItem(`pb_tournament_save_${mode}_${bracketSize}`);
+    const saved = localStorage.getItem(`pb_tournament_save_${mode}_${draftMode}_${bracketSize}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -272,6 +362,12 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
         if (parsed.customDuoSlots) {
           setCustomDuoSlots(parsed.customDuoSlots);
         }
+        if (parsed.autoDraftPool) {
+          setAutoDraftPool(parsed.autoDraftPool);
+        }
+        if (parsed.draftMode) {
+          setDraftMode(parsed.draftMode);
+        }
         if (parsed.winnersMap) {
           setWinnersMap(parsed.winnersMap);
         }
@@ -279,7 +375,28 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
         console.error('Failed to load saved tournament state', err);
       }
     }
-  }, [mode, bracketSize]);
+  }, [mode, bracketSize, draftMode]);
+
+  // Auto-advance BYE seeds when players/slots change
+  useEffect(() => {
+    if (byeCount === 0) return;
+
+    const updatedMap = { ...winnersMap };
+    let changed = false;
+
+    allSeedPairings.forEach((pairing, idx) => {
+      if (!isByeMatchup(pairing)) return;
+      const realSeed = getRealSeedFromBye(pairing);
+      const key = `1-${idx}`;
+      const realCompetitor = getCompetitorBySeed(realSeed);
+      if (realCompetitor && !updatedMap[key]) {
+        updatedMap[key] = realCompetitor;
+        changed = true;
+      }
+    });
+
+    if (changed) setWinnersMap(updatedMap);
+  }, [selectedSoloIds, customDuoSlots, bracketSize, autoDraftPool, draftMode]);
 
   // List of players already taken across all Duo slots to prevent "double booking"
   const getDuoAlreadyAssignedIds = () => {
@@ -312,9 +429,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
         </div>
 
         {/* Mode switcher, alerts & rankings lookups */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
           
-          <div className="bg-[#1A1D23] border border-[#2D3139] rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs text-on-surface-variant max-w-sm">
+          <div className="hidden md:flex bg-[#1A1D23] border border-[#2D3139] rounded-lg px-3 py-1.5 items-center gap-2 text-xs text-on-surface-variant max-w-sm">
             <AlertCircle className="w-4 h-4 text-brand-secondary shrink-0" />
             <span className="text-[10px] leading-snug">
               Matches inside the builder do not alter persistent ELO values.
@@ -345,14 +462,40 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
             </button>
           </div>
 
+          {/* Draft mode toggle — only visible in doubles */}
+          {mode === 'duo' && (
+            <div className="flex bg-[#0c0e12] p-1 rounded-lg border border-[#2D3139]">
+              <button
+                onClick={() => handleDraftModeChange('auto')}
+                className={`px-2.5 md:px-3 py-1 rounded text-[10px] md:text-xs font-bold uppercase transition-all tracking-wider ${
+                  draftMode === 'auto'
+                    ? 'bg-brand-secondary text-black font-extrabold'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                Auto
+              </button>
+              <button
+                onClick={() => handleDraftModeChange('manual')}
+                className={`px-2.5 md:px-3 py-1 rounded text-[10px] md:text-xs font-bold uppercase transition-all tracking-wider ${
+                  draftMode === 'manual'
+                    ? 'bg-brand-secondary text-black font-extrabold'
+                    : 'text-on-surface-variant hover:text-white'
+                }`}
+              >
+                Manual
+              </button>
+            </div>
+          )}
+
           <button
             onClick={() => setActiveScreen('dashboard')}
-            className="text-xs text-brand-primary hover:underline hover:text-brand-primary-container font-semibold transition-colors px-1"
+            className="hidden md:inline text-xs text-brand-primary hover:underline hover:text-brand-primary-container font-semibold transition-colors px-1"
           >
             Dashboard
           </button>
 
-          <div className="relative">
+          <div className="hidden md:block relative">
             <input
               type="text"
               placeholder="Search Global Rankings..."
@@ -381,25 +524,33 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
           />
         </div>
 
-        {/* Round Scale sizing buttons */}
+        {/* Round Scale sizing controls */}
         <div className="space-y-1">
           <span className="text-[9px] uppercase font-bold text-on-surface-variant tracking-wider block">
-            Bracket Size / Slots
+            Number of {mode === 'solo' ? 'Players' : 'Pairs'}
           </span>
-          <div className="flex gap-2">
-            {[8, 16, 32].map((size) => (
-              <button
-                key={size}
-                onClick={() => handleSizeChange(size as any)}
-                className={`px-4 py-2 text-xs font-bold font-display rounded-lg border uppercase transition-all ${
-                  bracketSize === size
-                    ? 'bg-[#252930] border-brand-primary text-brand-primary shadow-md'
-                    : 'bg-[#1a1d23] border-[#2D3139] text-on-surface-variant hover:text-white hover:border-[#2D3139]/80'
-                }`}
-              >
-                {size} {mode === 'solo' ? 'Players' : 'Pairs'}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={2}
+              max={32}
+              value={bracketSize}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v)) handleSizeChange(v);
+              }}
+              className="bg-[#0f1115] border border-[#2D3139] rounded-lg px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-brand-primary w-20 text-center transition-colors"
+            />
+            {byeCount > 0 && (
+              <span className="text-[10px] text-on-surface-variant font-mono">
+                ({byeCount} bye{byeCount > 1 ? 's' : ''} → {actualBracketSize}-player bracket)
+              </span>
+            )}
+            {byeCount === 0 && bracketSize > 2 && (
+              <span className="text-[10px] text-on-surface-variant font-mono">
+                (power of 2 — no byes)
+              </span>
+            )}
           </div>
         </div>
 
@@ -443,7 +594,6 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                 </p>
               </div>
 
-              {/* member finder */}
               <div className="relative">
                 <input
                   type="text"
@@ -455,11 +605,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
               </div>
 
-              {/* members list */}
               <div className="max-h-96 overflow-y-auto pr-1 flex flex-col gap-2 no-scrollbar">
                 {filteredSoloRoster.map((item) => {
                   const isAdded = selectedSoloIds.includes(item.id);
-                  
                   return (
                     <div
                       key={item.id}
@@ -472,34 +620,22 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                     >
                       <div className="flex items-center gap-3">
                         {item.avatar ? (
-                          <img 
-                            referrerPolicy="no-referrer"
-                            src={item.avatar} 
-                            alt={item.name} 
-                            className="w-8 h-8 rounded-full border border-[#2D3139] object-cover" 
-                          />
+                          <img referrerPolicy="no-referrer" src={item.avatar} alt={item.name} className="w-8 h-8 rounded-full border border-[#2D3139] object-cover" />
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-[#1A1D23] border border-[#2D3139] flex items-center justify-center font-bold text-xs text-brand-primary capitalize">
                             {item.name.slice(0, 2)}
                           </div>
                         )}
-
                         <div className="text-left">
-                          <p className={`text-xs ${isAdded ? 'text-white font-bold' : 'text-white/90'}`}>
-                            {item.name}
-                          </p>
+                          <p className={`text-xs ${isAdded ? 'text-white font-bold' : 'text-white/90'}`}>{item.name}</p>
                           <p className="text-[10px] text-on-surface-variant font-mono mt-0.5">
                             ELO: <strong className={isAdded ? 'text-brand-primary' : ''}>{item.elo}</strong>
                           </p>
                         </div>
                       </div>
-
-                      {/* added feedback */}
                       <div className="flex items-center gap-1 px-1">
                         <div className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center transition-colors ${
-                          isAdded 
-                            ? 'border-brand-primary bg-brand-primary text-black' 
-                            : 'border-[#2D3139] bg-transparent'
+                          isAdded ? 'border-brand-primary bg-brand-primary text-black' : 'border-[#2D3139] bg-transparent'
                         }`}>
                           {isAdded && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
@@ -507,14 +643,100 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                     </div>
                   );
                 })}
-
                 {filteredSoloRoster.length === 0 && (
                   <p className="text-center py-6 text-on-surface-variant text-xs">No matching club players found.</p>
                 )}
               </div>
             </>
+          ) : mode === 'duo' && draftMode === 'auto' ? (
+            /* DUO AUTO-DRAFT: POOL SELECTOR */
+            <>
+              <div className="border-b border-[#2D3139]/60 pb-2">
+                <h4 className="font-display text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-brand-secondary" />
+                  <span>Auto-Draft Pool</span>
+                </h4>
+                <p className="text-[10px] text-on-surface-variant mt-0.5 leading-relaxed">
+                  Pick {bracketSize * 2} players. System auto-creates balanced pairs seeded by ELO.
+                </p>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search club members..."
+                  value={searchMemberQuery}
+                  onChange={(e) => setSearchMemberQuery(e.target.value)}
+                  className="bg-[#0f1115] border border-[#2D3139] rounded-lg p-2.5 pl-9 text-xs text-white focus:outline-none focus:border-brand-primary w-full"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+              </div>
+
+              <div className="max-h-64 overflow-y-auto pr-1 flex flex-col gap-2 no-scrollbar">
+                {filteredSoloRoster.map((item) => {
+                  const isAdded = autoDraftPool.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => toggleAutoDraftPlayer(item.id)}
+                      className={`border p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all ${
+                        isAdded 
+                          ? 'bg-brand-secondary/10 border-brand-secondary text-white font-bold' 
+                          : 'bg-[#0f1115] border-[#2D3139] text-on-surface-variant hover:bg-[#252930] hover:border-[#2D3139]/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {item.avatar ? (
+                          <img referrerPolicy="no-referrer" src={item.avatar} alt={item.name} className="w-8 h-8 rounded-full border border-[#2D3139] object-cover" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#1A1D23] border border-[#2D3139] flex items-center justify-center font-bold text-xs text-brand-secondary capitalize">
+                            {item.name.slice(0, 2)}
+                          </div>
+                        )}
+                        <div className="text-left">
+                          <p className={`text-xs ${isAdded ? 'text-white font-bold' : 'text-white/90'}`}>{item.name}</p>
+                          <p className="text-[10px] text-on-surface-variant font-mono mt-0.5">
+                            ELO: <strong className={isAdded ? 'text-brand-secondary' : ''}>{item.elo}</strong>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 px-1">
+                        <div className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center transition-colors ${
+                          isAdded ? 'border-brand-secondary bg-brand-secondary text-black' : 'border-[#2D3139] bg-transparent'
+                        }`}>
+                          {isAdded && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {filteredSoloRoster.length === 0 && (
+                  <p className="text-center py-6 text-on-surface-variant text-xs">No matching club players found.</p>
+                )}
+              </div>
+
+              {isFilled && Object.keys(customDuoSlots).length > 0 && (
+                <div className="border-t border-[#2D3139]/60 pt-3 mt-1 space-y-2">
+                  <p className="text-[9px] uppercase font-bold text-brand-secondary tracking-wider">Auto-Generated Pairs</p>
+                  {Object.entries(customDuoSlots)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([seed, slot]: [string, { p1: Player | null; p2: Player | null }]) => {
+                      if (!slot || !slot.p1 || !slot.p2) return null;
+                      return (
+                        <div key={seed} className="bg-[#0f1115] border border-[#2D3139] p-2.5 rounded-lg flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[8px] bg-[#252930] font-mono text-on-surface-variant font-bold border border-[#2D3139] px-1.5 py-0.5 rounded">#{seed}</span>
+                            <span className="text-[10px] font-bold text-white">{slot.p1.name.split(' ')[0]} & {slot.p2.name.split(' ')[0]}</span>
+                          </div>
+                          <span className="text-[9px] font-mono text-brand-secondary font-bold">AVG: {Math.round((slot.p1.elo + slot.p2.elo) / 2)}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </>
           ) : (
-            /* DUO MODE: IN-CONTAINER DOUBLE SLOTS CREATOR */
+            /* DUO MANUAL: IN-CONTAINER DOUBLE SLOTS CREATOR */
             <>
               <div className="border-b border-[#2D3139]/60 pb-2">
                 <h4 className="font-display text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -526,7 +748,6 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                 </p>
               </div>
 
-              {/* Listing slots visually to make it feel like on-the-court management */}
               <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1 no-scrollbar">
                 {Array.from({ length: bracketSize }).map((_, i) => {
                   const seedNum = i + 1;
@@ -551,7 +772,6 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                           <span className="text-[9px] bg-[#252930] font-mono text-on-surface-variant font-bold border border-[#2D3139] px-2 py-0.5 rounded">
                             SLOT #{seedNum}
                           </span>
-                          
                           {hasTeam ? (
                             <span className="text-xs font-black text-white tracking-wide">
                               {slot.p1!.name.split(' ')[0]} & {slot.p2!.name.split(' ')[0]}
@@ -582,7 +802,7 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                       {hasTeam && (
                         <div className="mt-1.5 flex items-center gap-2 text-[10px] text-on-surface-variant font-medium">
                           <span className="font-mono text-brand-primary font-bold">AVG ELO: {Math.round((slot.p1!.elo + slot.p2!.elo) / 2)}</span>
-                          <span>•</span>
+                          <span>&bull;</span>
                           <span className="truncate max-w-[170px]">{slot.p1!.name.split(' ')[0]} ({slot.p1!.elo}) + {slot.p2!.name.split(' ')[0]} ({slot.p2!.elo})</span>
                         </div>
                       )}
@@ -598,7 +818,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
             <div className="flex items-center justify-between text-xs mb-1 bg-transparent">
               <span className="text-on-surface-variant font-semibold">Seeded Entries</span>
               <strong className={isFilled ? 'text-brand-primary font-black' : 'text-white'}>
-                {addedCount} / {bracketSize} {mode === 'solo' ? 'Players' : 'Teams'}
+                {mode === 'duo' && draftMode === 'auto'
+                  ? `${autoDraftPool.length} / ${bracketSize * 2} Players in Pool`
+                  : `${addedCount} / ${bracketSize} ${mode === 'solo' ? 'Players' : 'Teams'}`}
               </strong>
             </div>
             
@@ -606,7 +828,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
             <div className="w-full bg-[#0F1115] h-2 rounded-full overflow-hidden border border-[#2D3139]">
               <div 
                 className="bg-brand-primary max-h-full h-full rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, (addedCount / bracketSize) * 100)}%` }}
+                style={{ width: `${Math.min(100, (mode === 'duo' && draftMode === 'auto'
+                  ? (autoDraftPool.length / (bracketSize * 2)) * 100
+                  : (addedCount / bracketSize) * 100))}%` }}
               />
             </div>
 
@@ -616,7 +840,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                 ? '⭐ Bracket scale filled! Click players directly inside the bracket on the right to simulate match victories.' 
                 : mode === 'solo' 
                   ? `Choose ${bracketSize - addedCount} more players from the left list to populate bracket matchups.`
-                  : `Select empty slots on the right or configure in the list above to pair players directly.`
+                  : mode === 'duo' && draftMode === 'auto'
+                    ? `Pick ${bracketSize * 2 - autoDraftPool.length} more players to auto-draft pairs.`
+                    : `Select empty slots on the right or configure in the list above to pair players directly.`
               }
             </p>
           </div>
@@ -645,9 +871,9 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
           <div className="flex gap-8 py-4 px-1 min-w-[700px] select-none justify-between items-stretch">
             
             {/* Rounds Generation columns */}
-            {Array.from({ length: Math.log2(bracketSize) }).map((_, roundIdx) => {
+            {Array.from({ length: Math.log2(actualBracketSize) }).map((_, roundIdx) => {
               const currentRoundNumber = roundIdx + 1;
-              const matchesCount = bracketSize / Math.pow(2, currentRoundNumber);
+              const matchesCount = actualBracketSize / Math.pow(2, currentRoundNumber);
               
               return (
                 <div key={roundIdx} className="flex-1 flex flex-col justify-around gap-6 min-w-[190px]">
@@ -666,38 +892,50 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                       const key = `${currentRoundNumber}-${matchIdx}`;
                       const matchWinner = winnersMap[key];
 
+                      // Detect BYE matchups in round 1
+                      const pairing = currentRoundNumber === 1 ? allSeedPairings[matchIdx] : null;
+                      const p1IsBye = pairing && (pairing[0] > bracketSize);
+                      const p2IsBye = pairing && (pairing[1] > bracketSize);
+
                       return (
                         <div 
                           key={matchIdx} 
-                          className="bg-[#1A1D23] border border-[#2D3139] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-primary relative select-none"
+                          className={`bg-[#1A1D23] border rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-primary relative select-none ${
+                            p1IsBye || p2IsBye ? 'border-brand-primary/30 opacity-70' : 'border-[#2D3139]'
+                          }`}
                         >
                           {/* Match Index header banner */}
                           <div className="bg-[#0c0e12] border-b border-[#2D3139] text-[8px] uppercase font-semibold text-on-surface-variant/90 py-1.5 px-2.5 flex justify-between select-none">
                             <span>Match #{matchIdx + 1}</span>
-                            {matchWinner && (
+                            {p1IsBye || p2IsBye ? (
+                              <span className="text-brand-secondary font-black uppercase text-[7px] tracking-wider">
+                                BYE → Seed {(p1IsBye ? pairing![0] : pairing![1])} advances
+                              </span>
+                            ) : matchWinner ? (
                               <span className="text-brand-primary font-black uppercase text-[7px] tracking-wider flex items-center gap-0.5 animate-pulse">
                                 <Check className="w-2.5 h-2.5" /> Checked
                               </span>
-                            )}
+                            ) : null}
                           </div>
 
                           {/* Top Competitor Seat */}
                           <div
                             onClick={() => {
-                              if (p1) {
+                              if (p1 && !p1IsBye) {
                                 advanceCompetitor(currentRoundNumber, matchIdx, p1);
-                              } else if (mode === 'duo' && currentRoundNumber === 1) {
-                                // Trigger on-the-fly pairing creator for this seed slot!
+                              } else if (mode === 'duo' && currentRoundNumber === 1 && !p1IsBye) {
                                 setTempP1(null);
                                 setAssigningSeed(p1Seed as number);
                               }
                             }}
-                            className={`p-3 text-xs flex items-center justify-between cursor-pointer transition-all ${
-                              p1 
-                                ? 'hover:bg-[#252930] text-white' 
-                                : mode === 'duo' && currentRoundNumber === 1
-                                  ? 'hover:bg-[#252930] text-brand-primary/80 hover:text-brand-primary font-bold text-[10px] bg-[#0c0e12]'
-                                  : 'text-on-surface-variant/40 bg-transparent cursor-not-allowed'
+                            className={`p-3 text-xs flex items-center justify-between transition-all ${
+                              p1IsBye
+                                ? 'text-on-surface-variant/40 bg-[#0c0e12] cursor-not-allowed'
+                                : p1 
+                                  ? 'hover:bg-[#252930] text-white cursor-pointer' 
+                                  : mode === 'duo' && currentRoundNumber === 1
+                                    ? 'hover:bg-[#252930] text-brand-primary/80 hover:text-brand-primary font-bold text-[10px] bg-[#0c0e12] cursor-pointer'
+                                    : 'text-on-surface-variant/40 bg-transparent cursor-not-allowed'
                             } ${
                               matchWinner && p1 && matchWinner.id === p1.id
                                 ? 'bg-brand-primary/10 font-bold border-l-4 border-brand-primary'
@@ -705,10 +943,10 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                             }`}
                           >
                             <span className="truncate max-w-[125px]">
-                              {p1 ? p1.name : mode === 'duo' && currentRoundNumber === 1 ? '+ Add Team (Seed ' + p1Seed + ')' : 'Waiting...'}
+                              {p1IsBye ? 'BYE' : p1 ? p1.name : mode === 'duo' && currentRoundNumber === 1 ? '+ Add Team (Seed ' + p1Seed + ')' : 'Waiting...'}
                             </span>
                             <span className="font-mono text-[9px] bg-[#0c0e12] px-1.5 py-0.5 border border-[#2D3139] rounded text-on-surface-variant">
-                              {p1 ? p1.elo : `SEED ${p1Seed}`}
+                              {p1IsBye ? 'BYE' : p1 ? p1.elo : `SEED ${p1Seed}`}
                             </span>
                           </div>
 
@@ -717,20 +955,21 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                           {/* Bottom Competitor Seat */}
                           <div
                             onClick={() => {
-                              if (p2) {
+                              if (p2 && !p2IsBye) {
                                 advanceCompetitor(currentRoundNumber, matchIdx, p2);
-                              } else if (mode === 'duo' && currentRoundNumber === 1) {
-                                // Trigger on-the-fly pairing creator for this seed slot!
+                              } else if (mode === 'duo' && currentRoundNumber === 1 && !p2IsBye) {
                                 setTempP1(null);
                                 setAssigningSeed(p2Seed as number);
                               }
                             }}
-                            className={`p-3 text-xs flex items-center justify-between cursor-pointer transition-all ${
-                              p2 
-                                ? 'hover:bg-[#252930] text-white' 
-                                : mode === 'duo' && currentRoundNumber === 1
-                                  ? 'hover:bg-[#252930] text-brand-primary/80 hover:text-brand-primary font-bold text-[10px] bg-[#0c0e12]'
-                                  : 'text-on-surface-variant/40 bg-transparent cursor-not-allowed'
+                            className={`p-3 text-xs flex items-center justify-between transition-all ${
+                              p2IsBye
+                                ? 'text-on-surface-variant/40 bg-[#0c0e12] cursor-not-allowed'
+                                : p2 
+                                  ? 'hover:bg-[#252930] text-white cursor-pointer' 
+                                  : mode === 'duo' && currentRoundNumber === 1
+                                    ? 'hover:bg-[#252930] text-brand-primary/80 hover:text-brand-primary font-bold text-[10px] bg-[#0c0e12] cursor-pointer'
+                                    : 'text-on-surface-variant/40 bg-transparent cursor-not-allowed'
                             } ${
                               matchWinner && p2 && matchWinner.id === p2.id
                                 ? 'bg-brand-primary/10 font-bold border-l-4 border-brand-primary'
@@ -738,10 +977,10 @@ export default function TournamentBuilderView({ players, setActiveScreen }: Tour
                             }`}
                           >
                             <span className="truncate max-w-[125px]">
-                              {p2 ? p2.name : mode === 'duo' && currentRoundNumber === 1 ? '+ Add Team (Seed ' + p2Seed + ')' : 'Waiting...'}
+                              {p2IsBye ? 'BYE' : p2 ? p2.name : mode === 'duo' && currentRoundNumber === 1 ? '+ Add Team (Seed ' + p2Seed + ')' : 'Waiting...'}
                             </span>
                             <span className="font-mono text-[9px] bg-[#0c0e12] px-1.5 py-0.5 border border-[#2D3139] rounded text-on-surface-variant">
-                              {p2 ? p2.elo : `SEED ${p2Seed}`}
+                              {p2IsBye ? 'BYE' : p2 ? p2.elo : `SEED ${p2Seed}`}
                             </span>
                           </div>
 
