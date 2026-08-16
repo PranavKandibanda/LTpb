@@ -67,6 +67,7 @@ export interface Challenge {
   submittedScore?: string;
   submittedById?: string;
   winnerId?: string;
+  acceptedBy?: string[];
 }
 
 export interface Season {

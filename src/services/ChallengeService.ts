@@ -49,39 +49,87 @@ export class ChallengeService {
       timestamp: new Date().toISOString(),
       matchType: params.matchType,
       challengerPartnerId: params.challengerPartnerId || undefined,
-      opponentPartnerId: params.opponentPartnerId || undefined
+      opponentPartnerId: params.opponentPartnerId || undefined,
+      acceptedBy: [params.challengerId]
     };
 
     await ChallengeRepository.create(newChallenge);
 
-    // Notify opponent
+    // Notify opponent and opponent's partner
     await NotificationService.notifyChallengeReceived(params.opponentId, params.challengerName, params.timeString);
     if (params.opponentPartnerId) {
       await NotificationService.notifyChallengeReceived(params.opponentPartnerId, params.challengerName, params.timeString);
+    }
+    // Notify challenger's partner in doubles
+    if (params.challengerPartnerId) {
+      await NotificationService.notifyChallengeReceived(params.challengerPartnerId, params.challengerName, params.timeString);
     }
   }
 
   static async acceptChallenge(challengeId: string, acceptingUserId?: string): Promise<void> {
     const challenge = await ChallengeRepository.getById(challengeId);
-    if (!challenge) throw new Error('Challenge not found.');
+    if (!challenge) throw new Error('Challenge is not found.');
 
     if (acceptingUserId) {
       const accepter = await UserRepository.getById(acceptingUserId);
       if (accepter && accepter.status !== 'active') throw new Error('Your account is not active.');
     }
 
-    await ChallengeRepository.update(challengeId, { statusString: 'accepted' });
+    const currentAccepted = challenge.acceptedBy || [];
+    const updatedAccepted = acceptingUserId && !currentAccepted.includes(acceptingUserId)
+      ? [...currentAccepted, acceptingUserId]
+      : currentAccepted;
 
-    await NotificationService.notifyChallengeAccepted(challenge.challengerId, challenge.opponentName, challenge.timeString);
+    // Determine all required player IDs
+    const requiredIds = [challenge.challengerId, challenge.opponentId];
+    if (challenge.matchType === 'doubles') {
+      if (challenge.challengerPartnerId) requiredIds.push(challenge.challengerPartnerId);
+      if (challenge.opponentPartnerId) requiredIds.push(challenge.opponentPartnerId);
+    }
+
+    const allAccepted = requiredIds.every(id => updatedAccepted.includes(id));
+
+    if (allAccepted) {
+      await ChallengeRepository.update(challengeId, { statusString: 'accepted', acceptedBy: updatedAccepted });
+      // Notify all players that the challenge is fully accepted
+      const allPlayerIds = requiredIds.filter(id => id !== acceptingUserId);
+      for (const pid of allPlayerIds) {
+        await NotificationService.notifyChallengeAccepted(pid, challenge.opponentName, challenge.timeString);
+      }
+    } else {
+      await ChallengeRepository.update(challengeId, { acceptedBy: updatedAccepted });
+      // Notify remaining players that someone accepted
+      const remainingIds = requiredIds.filter(id => id !== acceptingUserId);
+      for (const pid of remainingIds) {
+        await NotificationService.sendNotification({
+          userId: pid,
+          title: 'Challenge Update',
+          message: `A player accepted the challenge for ${challenge.timeString}. Waiting for others to accept.`,
+        });
+      }
+    }
   }
 
-  static async declineChallenge(challengeId: string): Promise<void> {
+  static async declineChallenge(challengeId: string, decliningUserId?: string): Promise<void> {
     const challenge = await ChallengeRepository.getById(challengeId);
     if (!challenge) throw new Error('Challenge not found.');
 
     await ChallengeRepository.update(challengeId, { statusString: 'declined' });
 
-    await NotificationService.notifyChallengeRejected(challenge.challengerId, challenge.opponentName);
+    // Notify all other players
+    const allPlayerIds = [challenge.challengerId, challenge.opponentId];
+    if (challenge.challengerPartnerId) allPlayerIds.push(challenge.challengerPartnerId);
+    if (challenge.opponentPartnerId) allPlayerIds.push(challenge.opponentPartnerId);
+
+    const decliningName = decliningUserId
+      ? (await UserRepository.getById(decliningUserId))?.name || 'A player'
+      : 'A player';
+
+    for (const pid of allPlayerIds) {
+      if (pid !== decliningUserId) {
+        await NotificationService.notifyChallengeRejected(pid, decliningName);
+      }
+    }
   }
 
   static async cancelChallenge(challengeId: string): Promise<void> {

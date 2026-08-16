@@ -26,6 +26,7 @@ interface ChallengesViewProps {
   onSubmitScore: (id: string, score: string, winnerId: string) => void;
   onVerifyScore: (id: string) => void;
   onDisputeScore: (id: string) => void;
+  players: Player[];
 }
 
 export default function ChallengesView({
@@ -36,7 +37,8 @@ export default function ChallengesView({
   currentUser,
   onSubmitScore,
   onVerifyScore,
-  onDisputeScore
+  onDisputeScore,
+  players
 }: ChallengesViewProps) {
   const [activeTab, setActiveTab] = useState<'pending' | 'active' | 'history'>('pending');
   
@@ -154,7 +156,24 @@ export default function ChallengesView({
             activeList.map(item => {
               const isUserChallenger = item.challengerId === currentUser.id;
               const opponentLabel = isUserChallenger ? item.opponentName : item.challengerName;
-              const isIncomingInvite = item.opponentId === currentUser.id && item.statusString === 'pending';
+              const acceptedBy = item.acceptedBy || [];
+              const hasUserAccepted = acceptedBy.includes(currentUser.id);
+              const isIncomingInvite = item.statusString === 'pending' && !hasUserAccepted;
+
+              const isDoubles = item.matchType === 'doubles';
+              const opponentPartner = isDoubles ? players.find(p => p.id === item.opponentPartnerId) : null;
+              const challengerPartner = isDoubles ? players.find(p => p.id === item.challengerPartnerId) : null;
+
+              // Build list of all player IDs and their names for acceptance status
+              const allPlayerIds = [item.challengerId, item.opponentId];
+              if (isDoubles && item.challengerPartnerId) allPlayerIds.push(item.challengerPartnerId);
+              if (isDoubles && item.opponentPartnerId) allPlayerIds.push(item.opponentPartnerId);
+              const playerNames: Record<string, string> = {
+                [item.challengerId]: item.challengerName,
+                [item.opponentId]: item.opponentName,
+              };
+              if (item.challengerPartnerId && challengerPartner) playerNames[item.challengerPartnerId] = challengerPartner.name;
+              if (item.opponentPartnerId && opponentPartner) playerNames[item.opponentPartnerId] = opponentPartner.name;
 
               return (
                 <div
@@ -170,7 +189,9 @@ export default function ChallengesView({
                       <div className="flex flex-col text-left">
                         <div className="flex items-center gap-2">
                           <h3 className="text-sm font-black text-white uppercase tracking-tight">
-                            {isUserChallenger ? `vs. ${item.opponentName}` : `${item.challengerName}'s Challenge`}
+                            {isUserChallenger
+                              ? `vs. ${item.opponentName}${isDoubles && opponentPartner ? ` / ${opponentPartner.name}` : ''}`
+                              : `${item.challengerName}${isDoubles && challengerPartner ? ` / ${challengerPartner.name}` : ''}'s Challenge`}
                           </h3>
                           <span className="text-[9px] font-bold uppercase tracking-wider bg-brand-surface-high px-2 py-0.5 rounded text-on-surface-variant font-mono">
                             {item.matchType || 'singles'}
@@ -187,6 +208,22 @@ export default function ChallengesView({
                             <span>{item.location}</span>
                           </span>
                         </div>
+                        {item.statusString === 'pending' && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {allPlayerIds.map(pid => (
+                              <span
+                                key={pid}
+                                className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                  acceptedBy.includes(pid)
+                                    ? 'bg-brand-primary/10 text-brand-primary border-brand-primary/30'
+                                    : 'bg-brand-surface-high text-on-surface-variant border-brand-outline'
+                                }`}
+                              >
+                                {acceptedBy.includes(pid) ? '✓ ' : ''}{playerNames[pid] || 'Unknown'}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -194,7 +231,7 @@ export default function ChallengesView({
                     <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
                       {/* PENDING ACTIONS */}
                       {item.statusString === 'pending' && (
-                        isIncomingInvite ? (
+                        !hasUserAccepted ? (
                           <>
                             <button
                               onClick={() => onAcceptChallenge(item.id)}
@@ -212,14 +249,8 @@ export default function ChallengesView({
                         ) : (
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-on-surface-variant lowercase tracking-wider bg-brand-surface-lowest border border-brand-outline px-3 py-1.5 rounded-lg">
-                              Awaiting response...
+                              You accepted — waiting for others...
                             </span>
-                            <button
-                              onClick={() => onCancelChallenge(item.id)}
-                              className="px-3 py-1.5 border border-brand-outline text-red-400 hover:bg-red-500/10 rounded-lg text-[10px] font-bold uppercase cursor-pointer"
-                            >
-                              Cancel
-                            </button>
                           </div>
                         )
                       )}
@@ -362,8 +393,18 @@ export default function ChallengesView({
                             className="bg-brand-surface-high border border-brand-outline p-2.5 rounded text-xs text-white select-none focus:border-brand-primary outline-none"
                           >
                             <option value="">-- Choose Winner --</option>
-                            <option value={item.challengerId}>{item.challengerName} (Challenger)</option>
-                            <option value={item.opponentId}>{item.opponentName} (Opponent)</option>
+                            <optgroup label={`${item.challengerName}'s Team`}>
+                              <option value={item.challengerId}>{item.challengerName} (Challenger)</option>
+                              {isDoubles && challengerPartner && (
+                                <option value={challengerPartner.id}>{challengerPartner.name} (Partner)</option>
+                              )}
+                            </optgroup>
+                            <optgroup label={`${item.opponentName}'s Team`}>
+                              <option value={item.opponentId}>{item.opponentName} (Opponent)</option>
+                              {isDoubles && opponentPartner && (
+                                <option value={opponentPartner.id}>{opponentPartner.name} (Partner)</option>
+                              )}
+                            </optgroup>
                           </select>
                         </div>
 

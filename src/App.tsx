@@ -73,6 +73,8 @@ export default function App() {
   const [modalLocation, setModalLocation] = useState('Central Park Court #4');
   const [modalTime, setModalTime] = useState('Friday, 5:30 PM');
   const [modalMatchType, setModalMatchType] = useState<'singles' | 'doubles'>('singles');
+  const [modalChallengerPartnerId, setModalChallengerPartnerId] = useState('');
+  const [modalOpponentPartnerId, setModalOpponentPartnerId] = useState('');
 
   // Mobile sidebar toggle
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -198,17 +200,30 @@ export default function App() {
     try {
       await ChallengeService.acceptChallenge(challengeId, currentUser?.id);
       
-      const challengeObj = challenges.find(c => c.id === challengeId);
-      if (challengeObj) {
-        // Feed verification
-        const verifId = `v_new_${Date.now()}`;
-        await VerificationRepository.create({
-          id: verifId,
-          title: `Challenge Verified: vs. ${challengeObj.challengerName}`,
-          type: 'Awaiting Match Play Result',
-          status: 'verified',
-          timeAgo: 'Just now'
-        });
+      // Only create verification feed when challenge is fully accepted (status = accepted)
+      const updatedChallenge = challenges.find(c => c.id === challengeId);
+      if (updatedChallenge) {
+        const requiredIds = [updatedChallenge.challengerId, updatedChallenge.opponentId];
+        if (updatedChallenge.matchType === 'doubles') {
+          if (updatedChallenge.challengerPartnerId) requiredIds.push(updatedChallenge.challengerPartnerId);
+          if (updatedChallenge.opponentPartnerId) requiredIds.push(updatedChallenge.opponentPartnerId);
+        }
+        const currentAccepted = updatedChallenge.acceptedBy || [];
+        const nextAccepted = currentUser?.id && !currentAccepted.includes(currentUser.id)
+          ? [...currentAccepted, currentUser.id]
+          : currentAccepted;
+        const allAccepted = requiredIds.every(id => nextAccepted.includes(id));
+
+        if (allAccepted) {
+          const verifId = `v_new_${Date.now()}`;
+          await VerificationRepository.create({
+            id: verifId,
+            title: `Challenge Verified: vs. ${updatedChallenge.challengerName}`,
+            type: 'Awaiting Match Play Result',
+            status: 'verified',
+            timeAgo: 'Just now'
+          });
+        }
       }
     } catch (e) {
       console.error('Accept Challenge Failed', e);
@@ -218,7 +233,7 @@ export default function App() {
   // Decline challenge
   const handleDeclineChallenge = async (challengeId: string) => {
     try {
-      await ChallengeService.declineChallenge(challengeId);
+      await ChallengeService.declineChallenge(challengeId, currentUser?.id);
     } catch (e) {
       console.error('Decline Challenge Failed', e);
     }
@@ -240,6 +255,10 @@ export default function App() {
       alert("Please choose an opponent competitor to issue challenge!");
       return;
     }
+    if (modalMatchType === 'doubles' && (!modalChallengerPartnerId || !modalOpponentPartnerId)) {
+      alert("Doubles matches require both a partner for you and a partner for your opponent.");
+      return;
+    }
 
     const opponentPlayer = players.find(p => p.id === modalOpponentId);
     if (!opponentPlayer) return;
@@ -253,9 +272,14 @@ export default function App() {
         opponentName: opponentPlayer.name,
         timeString: modalTime,
         location: modalLocation,
-        matchType: modalMatchType
+        matchType: modalMatchType,
+        challengerPartnerId: modalMatchType === 'doubles' ? modalChallengerPartnerId : undefined,
+        opponentPartnerId: modalMatchType === 'doubles' ? modalOpponentPartnerId : undefined
       });
       setShowChallengeModal(false);
+      setModalMatchType('singles');
+      setModalChallengerPartnerId('');
+      setModalOpponentPartnerId('');
       setActiveScreen('challenges');
     } catch (err) {
       console.error('Create Challenge Failed', err);
@@ -477,6 +501,7 @@ export default function App() {
             onSubmitScore={handleSubmitScore}
             onVerifyScore={handleVerifyScore}
             onDisputeScore={handleDisputeScore}
+            players={players}
           />
         );
       case 'notifications':
@@ -647,7 +672,7 @@ export default function App() {
                 </h3>
               </div>
               <button
-                onClick={() => setShowChallengeModal(false)}
+                onClick={() => { setShowChallengeModal(false); setModalMatchType('singles'); setModalChallengerPartnerId(''); setModalOpponentPartnerId(''); }}
                 className="bg-brand-surface-high p-1.5 rounded-full text-on-surface-variant hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -688,6 +713,52 @@ export default function App() {
                   <option value="doubles">Competitive Doubles</option>
                 </select>
               </div>
+
+              {modalMatchType === 'doubles' && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">
+                      Your Partner:
+                    </label>
+                    <select
+                      className="bg-brand-surface-lowest border border-brand-outline rounded-xl p-3 text-xs text-white focus:outline-none focus:border-brand-primary cursor-pointer w-full"
+                      value={modalChallengerPartnerId}
+                      onChange={(e) => setModalChallengerPartnerId(e.target.value)}
+                      required
+                    >
+                      <option value="">-- Choose Your Partner --</option>
+                      {challengeCandidates
+                        .filter(p => p.id !== modalOpponentId)
+                        .map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.tier} • {p.elo} ELO)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">
+                      Opponent's Partner:
+                    </label>
+                    <select
+                      className="bg-brand-surface-lowest border border-brand-outline rounded-xl p-3 text-xs text-white focus:outline-none focus:border-brand-primary cursor-pointer w-full"
+                      value={modalOpponentPartnerId}
+                      onChange={(e) => setModalOpponentPartnerId(e.target.value)}
+                      required
+                    >
+                      <option value="">-- Choose Opponent's Partner --</option>
+                      {challengeCandidates
+                        .filter(p => p.id !== modalOpponentId && p.id !== modalChallengerPartnerId)
+                        .map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.tier} • {p.elo} ELO)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </>
+              )}
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">
@@ -731,7 +802,8 @@ export default function App() {
 
               <button
                 type="submit"
-                className="w-full bg-brand-primary text-black font-extrabold text-xs py-3 rounded-xl hover:opacity-95 active:scale-95 transition-all shadow-lg cursor-pointer uppercase tracking-wider"
+                disabled={!modalOpponentId || (modalMatchType === 'doubles' && (!modalChallengerPartnerId || !modalOpponentPartnerId))}
+                className="w-full font-extrabold text-xs py-3 rounded-xl transition-all shadow-lg uppercase tracking-wider disabled:bg-brand-surface-high disabled:text-on-surface-variant disabled:cursor-not-allowed disabled:shadow-none bg-brand-primary text-black hover:opacity-95 active:scale-95 cursor-pointer"
               >
                 Inscribe Custom Challenge
               </button>
