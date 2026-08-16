@@ -34,6 +34,7 @@ export default function LeaderboardView({
   const [tierFilter, setTierFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'elo' | 'wins' | 'winrate'>('elo');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [mobileStatsPlayer, setMobileStatsPlayer] = useState<Player | null>(null);
   
   // Pagination stats
   const [currentPage, setCurrentPage] = useState(1);
@@ -232,7 +233,7 @@ export default function LeaderboardView({
                 </th>
                 <th 
                   onClick={() => handleSortToggle('wins')}
-                  className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant cursor-pointer hover:text-white select-none hidden sm:table-cell"
+                  className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant cursor-pointer hover:text-white select-none hidden md:table-cell"
                 >
                   <div className="flex items-center gap-1.5">
                     <span>Wins</span>
@@ -243,12 +244,12 @@ export default function LeaderboardView({
                     )}
                   </div>
                 </th>
-                <th className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant hidden sm:table-cell">
+                <th className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant hidden md:table-cell">
                   Losses
                 </th>
                 <th 
                   onClick={() => handleSortToggle('winrate')}
-                  className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant cursor-pointer hover:text-white select-none"
+                  className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant cursor-pointer hover:text-white select-none hidden md:table-cell"
                 >
                   <div className="flex items-center gap-1.5">
                     <span>Win %</span>
@@ -259,7 +260,7 @@ export default function LeaderboardView({
                     )}
                   </div>
                 </th>
-                <th className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant text-right">
+                <th className="py-4 px-6 text-[10px] uppercase font-bold tracking-wider text-on-surface-variant text-right hidden md:table-cell">
                   Trend
                 </th>
               </tr>
@@ -283,7 +284,13 @@ export default function LeaderboardView({
                   return (
                     <tr
                       key={player.id}
-                      onClick={() => onSelectPlayer(player)}
+                      onClick={() => {
+                        if (window.innerWidth < 768) {
+                          setMobileStatsPlayer(mobileStatsPlayer?.id === player.id ? null : player);
+                        } else {
+                          onSelectPlayer(player);
+                        }
+                      }}
                       className="hover:bg-brand-surface-high/70 transition-colors group cursor-pointer"
                       title="Inspect full player history & stats"
                     >
@@ -351,16 +358,16 @@ export default function LeaderboardView({
                         </span>
                       </td>
 
-                      <td className="py-5 px-6 font-bold text-white hidden sm:table-cell">
+                      <td className="py-5 px-6 font-bold text-white hidden md:table-cell">
                         {player.wins}
                       </td>
 
-                      <td className="py-5 px-6 text-on-surface-variant hidden sm:table-cell">
+                      <td className="py-5 px-6 text-on-surface-variant hidden md:table-cell">
                         {player.losses}
                       </td>
 
                       {/* Win Percent Progress column */}
-                      <td className="py-5 px-6 font-sans">
+                      <td className="py-5 px-6 font-sans hidden md:table-cell">
                         <div className="flex flex-col gap-1.5">
                           <span className="font-bold text-white">{winPct}%</span>
                           <div className="w-24 h-1.5 bg-brand-surface-high rounded-full overflow-hidden">
@@ -379,7 +386,7 @@ export default function LeaderboardView({
                       </td>
 
                       {/* Trend Badge column */}
-                      <td className="py-5 px-6 text-right font-bold text-xs">
+                      <td className="py-5 px-6 text-right font-bold text-xs hidden md:table-cell">
                         <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg ${
                           player.trend > 0 
                             ? 'bg-brand-primary-container/10 text-brand-primary' 
@@ -446,6 +453,89 @@ export default function LeaderboardView({
           </div>
         </div>
       </div>
+
+      {/* Mobile player stats popup */}
+      {mobileStatsPlayer && (
+        <div className="md:hidden fixed inset-x-0 bottom-16 z-50 px-4 pb-2 animate-slideUp">
+          <div className="bg-brand-surface border border-brand-outline rounded-2xl p-4 shadow-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                {mobileStatsPlayer.avatar ? (
+                  <img
+                    alt={mobileStatsPlayer.name}
+                    className="w-10 h-10 rounded-full border border-brand-primary object-cover"
+                    src={mobileStatsPlayer.avatar}
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-brand-surface-high border border-brand-primary flex items-center justify-center font-bold text-brand-primary text-sm">
+                    {mobileStatsPlayer.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="font-bold text-white text-sm">{mobileStatsPlayer.name}</p>
+                  <span className={`text-[10px] uppercase font-extrabold tracking-widest ${
+                    mobileStatsPlayer.tier === 'Grandmaster' ? 'text-brand-tertiary' : 'text-brand-secondary'
+                  }`}>
+                    {mobileStatsPlayer.tier}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setMobileStatsPlayer(null)}
+                className="text-on-surface-variant hover:text-white transition-colors cursor-pointer p-1"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-3 text-center">
+              <div className="bg-brand-surface-high rounded-xl py-2">
+                <p className="text-[10px] text-on-surface-variant uppercase font-bold">Elo</p>
+                <p className="font-display font-black text-white text-sm">{mobileStatsPlayer.elo.toLocaleString()}</p>
+              </div>
+              <div className="bg-brand-surface-high rounded-xl py-2">
+                <p className="text-[10px] text-on-surface-variant uppercase font-bold">Wins</p>
+                <p className="font-display font-black text-white text-sm">{mobileStatsPlayer.wins}</p>
+              </div>
+              <div className="bg-brand-surface-high rounded-xl py-2">
+                <p className="text-[10px] text-on-surface-variant uppercase font-bold">Losses</p>
+                <p className="font-display font-black text-white text-sm">{mobileStatsPlayer.losses}</p>
+              </div>
+              <div className="bg-brand-surface-high rounded-xl py-2">
+                <p className="text-[10px] text-on-surface-variant uppercase font-bold">Win %</p>
+                <p className="font-display font-black text-white text-sm">{getWinRate(mobileStatsPlayer)}%</p>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                mobileStatsPlayer.trend > 0 
+                  ? 'bg-brand-primary-container/10 text-brand-primary' 
+                  : mobileStatsPlayer.trend < 0 
+                    ? 'bg-red-500/10 text-red-400' 
+                    : 'bg-brand-surface-high text-on-surface-variant'
+              }`}>
+                {mobileStatsPlayer.trend > 0 ? (
+                  <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{mobileStatsPlayer.trend}</span>
+                ) : mobileStatsPlayer.trend < 0 ? (
+                  <span className="inline-flex items-center gap-1"><TrendingDown className="w-3 h-3" /> {mobileStatsPlayer.trend}</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1"><Minus className="w-3 h-3" /> 0</span>
+                )}
+              </span>
+              <button
+                onClick={() => {
+                  setMobileStatsPlayer(null);
+                  onSelectPlayer(mobileStatsPlayer);
+                }}
+                className="text-xs font-bold text-brand-primary hover:underline cursor-pointer"
+              >
+                View Full Profile →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bento Performance Stats Cards */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">

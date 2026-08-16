@@ -21,6 +21,8 @@ interface SidebarProps {
   pendingChallengesCount: number;
   onChangeAvatar?: () => void;
   onLogout?: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export default function Sidebar({
@@ -30,26 +32,52 @@ export default function Sidebar({
   onOpenNewChallenge,
   pendingChallengesCount,
   onChangeAvatar,
-  onLogout
+  onLogout,
+  isOpen = false,
+  onClose
 }: SidebarProps) {
 
+  const handleNav = (screen: ActiveScreen) => {
+    setActiveScreen(screen);
+    onClose?.();
+  };
+
   return (
-    <aside id="sidebar" className="h-full w-64 fixed left-0 top-0 border-r border-brand-outline bg-brand-surface flex flex-col py-6 px-4 z-50">
+    <>
+      {/* Backdrop — mobile only, visible when open */}
+      {onClose && (
+        <div
+          className={`md:hidden fixed inset-0 bg-black/60 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          onClick={onClose}
+        />
+      )}
+
+      <aside id="sidebar" className={`fixed left-0 top-0 h-full w-64 border-r border-brand-outline bg-brand-surface flex flex-col py-6 px-4 z-50 transition-transform duration-300 ease-in-out
+        md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       {/* Brand logo & platform headers */}
-      <div className="mb-10 px-2">
-        <h1 className="font-display text-lg font-extrabold text-brand-primary uppercase tracking-tighter flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-brand-primary" />
-          <span>Pickleball Club</span>
-        </h1>
-        <p className="text-on-surface-variant font-sans uppercase tracking-widest text-[10px] font-semibold mt-1">
-          Pro-Tracker Platform
-        </p>
+      <div className="mb-10 px-2 flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-lg font-extrabold text-brand-primary uppercase tracking-tighter flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-brand-primary" />
+            <span>Pickleball Club</span>
+          </h1>
+          <p className="text-on-surface-variant font-sans uppercase tracking-widest text-[10px] font-semibold mt-1">
+            Pro-Tracker Platform
+          </p>
+        </div>
+        {onClose && (
+          <button onClick={onClose} className="md:hidden text-on-surface-variant hover:text-white transition-colors cursor-pointer p-1">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Navigation items */}
       <nav className="flex-grow space-y-1">
         <button
-          onClick={() => setActiveScreen('dashboard')}
+          onClick={() => handleNav('dashboard')}
           className={`w-full flex items-center justify-between py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'dashboard' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -63,7 +91,7 @@ export default function Sidebar({
         </button>
 
         <button
-          onClick={() => setActiveScreen('leaderboard')}
+          onClick={() => handleNav('leaderboard')}
           className={`w-full flex items-center py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'leaderboard' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -77,7 +105,7 @@ export default function Sidebar({
         </button>
 
         <button
-          onClick={() => setActiveScreen('challenges')}
+          onClick={() => handleNav('challenges')}
           className={`w-full flex items-center justify-between py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'challenges' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -96,7 +124,7 @@ export default function Sidebar({
         </button>
 
         <button
-          onClick={() => setActiveScreen('notifications')}
+          onClick={() => handleNav('notifications')}
           className={`w-full flex items-center justify-between py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'notifications' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -111,7 +139,7 @@ export default function Sidebar({
         </button>
 
         <button
-          onClick={() => setActiveScreen('profile')}
+          onClick={() => handleNav('profile')}
           className={`w-full flex items-center py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'profile' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -125,7 +153,7 @@ export default function Sidebar({
         </button>
 
         <button
-          onClick={() => setActiveScreen('tournament-builder')}
+          onClick={() => handleNav('tournament-builder')}
           className={`w-full flex items-center py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'tournament-builder' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -139,7 +167,7 @@ export default function Sidebar({
         </button>
 
         <button
-          onClick={() => setActiveScreen('admin')}
+          onClick={() => handleNav('admin')}
           className={`w-full flex items-center py-3 px-4 rounded-lg font-medium transition-colors duration-200 cursor-pointer ${
             activeScreen === 'admin' 
               ? 'text-brand-primary bg-brand-surface-high font-bold border-r-2 border-brand-primary' 
@@ -216,5 +244,6 @@ export default function Sidebar({
         </div>
       </div>
     </aside>
+    </>
   );
 }

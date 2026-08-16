@@ -74,6 +74,9 @@ export default function App() {
   const [modalTime, setModalTime] = useState('Friday, 5:30 PM');
   const [modalMatchType, setModalMatchType] = useState<'singles' | 'doubles'>('singles');
 
+  // Mobile sidebar toggle
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   // Sync profile selections when players list changes
   useEffect(() => {
     if (!currentUser) return;
@@ -588,10 +591,13 @@ export default function App() {
             setModalOpponentId(challengeCandidates[0].id);
           }
           setShowChallengeModal(true);
+          setSidebarOpen(false);
         }}
         onLogout={handleLogout}
         onChangeAvatar={() => setShowAvatarPicker(true)}
         pendingChallengesCount={challenges.filter(c => c.statusString === 'pending' && c.isIncoming).length}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {/* Main Content Layout Page */}
@@ -609,6 +615,7 @@ export default function App() {
             setShowChallengeModal(true);
           }}
           onOpenSettings={() => setActiveScreen('admin')}
+          onMenuToggle={() => setSidebarOpen(true)}
         />
 
         {/* Content Canvas Frame */}
@@ -616,50 +623,6 @@ export default function App() {
           {renderScreen()}
         </main>
       </div>
-
-      {/* Bottom responsive tab navigation for mobile layout widths */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-brand-surface border-t border-brand-outline flex justify-around items-center h-14 z-50 shadow-2xl">
-        <button 
-          onClick={() => setActiveScreen('dashboard')}
-          className={`flex flex-col items-center gap-0.5 text-xs bg-transparent border-0 cursor-pointer ${activeScreen === 'dashboard' ? 'text-brand-primary font-bold' : 'text-on-surface-variant'}`}
-        >
-          <Trophy className="w-4 h-4 shrink-0" />
-          <span className="text-[9px]">Home</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('leaderboard')}
-          className={`flex flex-col items-center gap-0.5 text-xs bg-transparent border-0 cursor-pointer ${activeScreen === 'leaderboard' ? 'text-brand-primary font-bold' : 'text-on-surface-variant'}`}
-        >
-          <Users className="w-4 h-4 shrink-0" />
-          <span className="text-[9px]">Lists</span>
-        </button>
-        <button
-          onClick={() => {
-            if (challengeCandidates[0]) {
-              setModalOpponentId(challengeCandidates[0].id);
-            }
-            setShowChallengeModal(true);
-          }}
-          className="flex flex-col items-center justify-center -translate-y-2 bg-brand-primary-container text-black w-10 h-10 rounded-full shadow-lg border-2 border-brand-bg shrink-0"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
-        <button 
-          onClick={() => setActiveScreen('challenges')}
-          className={`flex flex-col items-center gap-0.5 text-xs bg-transparent border-0 cursor-pointer ${activeScreen === 'challenges' ? 'text-brand-primary font-bold' : 'text-on-surface-variant'}`}
-        >
-          <Calendar className="w-4 h-4 shrink-0" />
-          <span className="text-[9px]">Match</span>
-        </button>
-        <button 
-          onClick={() => setActiveScreen('notifications')}
-          className={`flex flex-col items-center gap-0.5 text-xs bg-transparent border-0 cursor-pointer relative ${activeScreen === 'notifications' ? 'text-brand-primary font-bold' : 'text-on-surface-variant'}`}
-        >
-          <Bell className="w-4 h-4 shrink-0" />
-          <span className="text-[9px]">Alerts</span>
-          <span className="absolute top-1 right-2 w-1.5 h-1.5 bg-brand-primary rounded-full"></span>
-        </button>
-      </nav>
 
       {/* Pristine Animated custom Modal for "New Challenge" matches exact aesthetic guidelines */}
       {showAvatarPicker && (

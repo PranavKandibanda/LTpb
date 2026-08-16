@@ -7,6 +7,7 @@ interface HeaderProps {
   setSearchQuery: (q: string) => void;
   onOpenNewChallenge?: () => void;
   onOpenSettings?: () => void;
+  onMenuToggle?: () => void;
 }
 
 export default function Header({
@@ -14,18 +15,29 @@ export default function Header({
   searchQuery,
   setSearchQuery,
   onOpenNewChallenge,
-  onOpenSettings
+  onOpenSettings,
+  onMenuToggle
 }: HeaderProps) {
   return (
     <header className="flex justify-between items-center w-full px-6 h-16 md:ml-64 md:max-w-[calc(100%-16rem)] fixed top-0 bg-brand-bg/85 backdrop-blur-md z-40 border-b border-brand-outline">
       {/* Route Info */}
-      <div className="flex items-center gap-2">
-        <span className="text-on-surface-variant font-medium text-xs tracking-wider uppercase">Navigation /</span>
-        <span className="text-brand-primary font-bold text-xs tracking-widest uppercase">{currentView}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        {onMenuToggle && (
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden text-on-surface-variant hover:text-white transition-colors cursor-pointer p-1 -ml-1 mr-1 shrink-0"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+        )}
+        <span className="hidden md:inline text-on-surface-variant font-medium text-xs tracking-wider uppercase">Navigation /</span>
+        <span className="text-brand-primary font-bold text-xs tracking-widest uppercase truncate">{currentView}</span>
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 shrink-0">
         {/* Expanded Search Bar */}
         <div className="relative hidden lg:block">
           <input
@@ -42,7 +54,7 @@ export default function Header({
         {onOpenNewChallenge && (
           <button
             onClick={onOpenNewChallenge}
-            className="bg-brand-primary text-black font-semibold text-xs px-4 py-2 rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-md cursor-pointer uppercase tracking-wider"
+            className="hidden md:block bg-brand-primary text-black font-semibold text-xs px-4 py-2 rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-md cursor-pointer uppercase tracking-wider"
           >
             New Challenge
           </button>
@@ -51,7 +63,7 @@ export default function Header({
         {/* Simple Settings Action */}
         <button 
           onClick={onOpenSettings}
-          className="bg-brand-surface-high p-2 rounded-full border border-brand-outline hover:bg-brand-surface-variant transition-colors cursor-pointer text-on-surface hover:text-brand-primary"
+          className="hidden md:block bg-brand-surface-high p-2 rounded-full border border-brand-outline hover:bg-brand-surface-variant transition-colors cursor-pointer text-on-surface hover:text-brand-primary"
           title="Club Settings"
         >
           <Settings className="w-4 h-4" />
